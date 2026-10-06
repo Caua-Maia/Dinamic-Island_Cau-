@@ -1,0 +1,1331 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dynamic Island</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      /* Cor tirada da capa do álbum. Alimenta o halo e os detalhes. */
+      --glow: 150 150 160;
+      /* Curvas de movimento: a primeira é a do iOS, a segunda tem um leve repique. */
+      --ease: cubic-bezier(.32, .72, 0, 1);
+      --spring: cubic-bezier(.3, 1.22, .36, 1);
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      background: transparent;
+      overflow: hidden;
+      color: #fff;
+      font-family: "Segoe UI Variable Display", "Segoe UI Variable Text", "Segoe UI", sans-serif;
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+      user-select: none;
+    }
+
+    button { font-family: inherit; color: inherit; cursor: pointer; border: 0; background: none; }
+
+    /* Faixa invisível na borda de cima, no mesmo lugar em que a barra de tarefas espera o mouse. */
+    #borda {
+      position: absolute;
+      top: 0;
+      left: 50%;
+      width: 240px;
+      height: 10px;
+      transform: translateX(-50%);
+    }
+
+    /* O palco é invisível. Só as cápsulas pretas recebem o mouse. */
+    #cluster {
+      position: absolute;
+      top: 0;
+      left: 50%;
+      transform: translateX(-50%) translateY(0);
+      display: flex;
+      align-items: flex-start;
+      pointer-events: none;
+      transition: transform .78s var(--spring);
+    }
+
+    /* Recolhida: sobra só um fio de 2px, como a barra de tarefas escondida. */
+    #cluster.away {
+      transform: translateX(-50%) translateY(calc(-100% + 2px));
+      transition: transform .5s var(--ease);
+    }
+
+    #cluster:not(.away) #detached { display: none; }
+
+    .pager {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 12px;
+      z-index: 6;
+      display: flex;
+      justify-content: center;
+      gap: 6px;
+    }
+    #cluster.away .pager { display: none; }
+    .pager button {
+      width: 6px;
+      height: 6px;
+      padding: 0;
+      border-radius: 99px;
+      background: rgba(255,255,255,.28);
+      transition: width .35s var(--spring), background .2s ease;
+    }
+    .pager button.on { width: 16px; background: #c4b5fd; }
+
+    .blob {
+      position: relative;
+      flex: none;
+      overflow: hidden;
+      color: #fff;
+      cursor: pointer;
+      pointer-events: auto;
+      background: #000;
+      /* Halo colorido da capa + sombra de profundidade. */
+      box-shadow:
+        0 0 22px -4px rgb(var(--glow) / .5),
+        0 18px 40px -12px rgb(var(--glow) / .32),
+        0 16px 36px rgba(0,0,0,.44);
+      transition:
+        width .58s var(--spring),
+        height .58s var(--spring),
+        border-radius .5s var(--ease),
+        margin .58s var(--spring),
+        box-shadow .5s ease,
+        opacity .3s ease;
+      will-change: width, height;
+    }
+
+    /* Recolhida não deixa o halo vazar para a tela. */
+    #cluster.away .blob { box-shadow: none; }
+
+    /* Fio de luz no topo: dá o acabamento de vidro. */
+    .blob::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      z-index: 3;
+      border-radius: inherit;
+      pointer-events: none;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,.1) 0%, rgba(255,255,255,0) 38%),
+        radial-gradient(120% 80% at 50% -30%, rgb(var(--glow) / .22), transparent 70%);
+      box-shadow:
+        inset 0 .5px 0 rgba(255,255,255,.22),
+        inset 0 0 0 .5px rgba(255,255,255,.1);
+    }
+
+    /* Squish: a cápsula amassa de leve ao trocar de forma, como no iPhone. */
+    @keyframes squish {
+      0%   { transform: scale(1, 1); }
+      26%  { transform: scale(1.016, .962); }
+      58%  { transform: scale(.994, 1.014); }
+      100% { transform: scale(1, 1); }
+    }
+    .blob.morph { animation: squish .6s var(--ease); }
+
+    /* Repouso: cápsula curta, só com a hora. */
+    .blob.rest { width: 116px; height: 37px; border-radius: 19px; }
+
+    /* Compacta: uma atividade, conteúdo colado, sem espaço sobrando. */
+    .blob.music-compact { width: 98px; height: 37px; border-radius: 19px; }
+    .blob.timer-compact { width: 124px; height: 37px; border-radius: 19px; }
+    .blob.charge { width: 108px; height: 37px; border-radius: 19px; }
+
+    /* Mínima: duas atividades. A música vira um círculo; o timer fica ao lado. */
+    .blob.minimal { width: 37px; height: 37px; border-radius: 19px; }
+    #detached {
+      width: 0;
+      height: 37px;
+      margin-left: 0;
+      opacity: 0;
+      border-radius: 19px;
+      pointer-events: none;
+      box-shadow: none;
+    }
+    #cluster.minimal #detached {
+      width: 80px;
+      margin-left: 8px;
+      opacity: 1;
+      pointer-events: auto;
+    }
+    #cluster.minimal.away #detached { box-shadow: none; }
+
+    /* Expandida: toque longo no iPhone vira um clique aqui. */
+    .blob.expanded-music,
+    .blob.power,
+    .blob.expanded-timer,
+    .blob.expanded-status {
+      background: linear-gradient(145deg, rgba(30,31,42,.96), rgba(13,14,20,.98));
+    }
+    .blob.expanded-music  { width: 420px; height: 148px; border-radius: 28px; }
+    .blob.power           { width: 300px; height: 128px; border-radius: 28px; }
+    .blob.expanded-timer  { width: 360px; height: 148px; border-radius: 28px; }
+    .blob.expanded-status { width: 280px; height: 128px; border-radius: 28px; }
+    .blob.alert-banner { width: 344px; height: 90px; border-radius: 42px; }
+    .blob.alert-inline { width: 200px; height: 37px; border-radius: 19px; }
+
+    /* Trocas de conteúdo: entra crescendo e saindo do desfoque. */
+    .face {
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      opacity: 0;
+      transform: scale(.9);
+      filter: blur(7px);
+      pointer-events: none;
+      transition:
+        opacity .24s ease,
+        transform .46s var(--spring),
+        filter .26s ease;
+    }
+    .face.on {
+      opacity: 1;
+      transform: scale(1);
+      filter: blur(0);
+      pointer-events: auto;
+    }
+
+    .face[data-face="rest"],
+    .face[data-face="music-min"],
+    .face[data-face="timer-min"] {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .rest-time, .min-time, .compact-time {
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: -0.03em;
+      text-shadow: 0 1px 10px rgba(0,0,0,.5);
+    }
+    .rest-time { font-size: 15px; }
+    .min-time, .compact-time { font-size: 14px; }
+
+    .row {
+      height: 100%;
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      padding: 4px 13px 4px 4px;
+    }
+    .row.timer { padding-left: 11px; gap: 9px; }
+
+    /* Capa do álbum */
+    .art {
+      flex: none;
+      position: relative;
+      background: #18181b center/cover no-repeat;
+      display: grid;
+      place-items: center;
+      color: rgba(255,255,255,.9);
+      box-shadow:
+        inset 0 0 0 .5px rgba(255,255,255,.16),
+        0 4px 14px -2px rgba(0,0,0,.6);
+      transition: transform .5s var(--spring);
+    }
+    .art.has-art .fallback { display: none; }
+    .art-sm, .art-fill { width: 29px; height: 29px; border-radius: 50%; }
+    .art-lg {
+      width: 44px;
+      height: 44px;
+      border-radius: 16px;
+      background-image: linear-gradient(135deg, #e879f9, #8b5cf6 55%, #4f46e5);
+      box-shadow:
+        inset 0 0 0 .5px rgba(255,255,255,.16),
+        0 8px 18px -6px rgba(139,92,246,.55);
+    }
+    /* Faixa nova: a capa dá um pulsinho. */
+    @keyframes artPop {
+      0%   { transform: scale(.82); }
+      55%  { transform: scale(1.05); }
+      100% { transform: scale(1); }
+    }
+    .art.pop { animation: artPop .62s var(--ease); }
+
+    /* Equalizador com as cores da capa */
+    .eq { display: flex; align-items: flex-end; gap: 2.5px; height: 14px; margin-left: auto; }
+    .eq span {
+      width: 2.5px;
+      height: 100%;
+      border-radius: 2px;
+      background: linear-gradient(180deg, #fff, rgb(var(--glow)));
+      transform-origin: center bottom;
+      animation: eq 1.05s ease-in-out infinite;
+      box-shadow: 0 0 7px rgb(var(--glow) / .85);
+    }
+    .eq span:nth-child(2) { animation-delay: .12s; }
+    .eq span:nth-child(3) { animation-delay: .28s; }
+    .eq span:nth-child(4) { animation-delay: .4s; }
+    @keyframes eq {
+      0%, 100% { transform: scaleY(.26); }
+      50%      { transform: scaleY(1); }
+    }
+    .eq.paused span {
+      animation: none;
+      transform: scaleY(.3);
+      opacity: .4;
+      box-shadow: none;
+    }
+
+    /* Luz de carga: esfera acesa. A face inteira some quando não está carregando. */
+    .charge-row {
+      height: 100%;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 14px 0 6px;
+    }
+    .charge-orb {
+      width: 25px;
+      height: 25px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      color: #04210c;
+      background: radial-gradient(circle at 38% 32%, #eafff0 0%, #7dffab 28%, #30d158 62%, #0c8a38 100%);
+      box-shadow: 0 0 0 3px rgba(48,209,88,.18), 0 0 14px rgba(48,209,88,.95);
+      animation: orb 1.6s ease-in-out infinite;
+    }
+    .charge-orb svg { width: 12px; height: 12px; }
+    @keyframes orb {
+      0%, 100% { box-shadow: 0 0 0 3px rgba(48,209,88,.16), 0 0 10px rgba(48,209,88,.7); }
+      50% { box-shadow: 0 0 0 5px rgba(48,209,88,.28), 0 0 18px rgba(48,209,88,1); }
+    }
+    .charge-pct {
+      font-size: 14px;
+      font-weight: 650;
+      letter-spacing: -0.03em;
+      font-variant-numeric: tabular-nums;
+      color: #7dffab;
+      text-shadow: 0 0 10px rgba(48,209,88,.65);
+    }
+    .live-bolt {
+      margin-left: auto;
+      color: #30d158;
+      filter: drop-shadow(0 0 6px rgba(48,209,88,.9));
+      display: flex;
+    }
+    .live-bolt[hidden] { display: none; }
+
+    /* Anel do timer, igual ao do iOS */
+    .ring { display: block; transform: rotate(-90deg); overflow: visible; }
+    .ring circle { fill: none; stroke-linecap: round; }
+    .ring .bg { stroke: rgba(255,255,255,.16); }
+    .ring .fill {
+      stroke: #ff9f0a;
+      filter: drop-shadow(0 0 5px rgba(255,159,10,.75));
+      transition: stroke-dashoffset .95s linear;
+    }
+    .ring-sm { width: 17px; height: 17px; }
+    .ring-sm circle { stroke-width: 3; }
+    .ring-lg { width: 52px; height: 52px; }
+    .ring-lg circle { stroke-width: 3.4; }
+
+    /* ── Música expandida ─────────────────────────── */
+    .face[data-face="expanded-music"] {
+      padding: 16px 18px 22px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .music-top { display: flex; gap: 12px; align-items: center; min-width: 0; }
+    .music-copy { min-width: 0; flex: 1; }
+    .hairline { height: 1px; background: rgba(255,255,255,.07); }
+
+    .title {
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      white-space: nowrap;
+      overflow: hidden;
+      -webkit-mask-image: linear-gradient(90deg, #000 0, #000 86%, transparent 100%);
+              mask-image: linear-gradient(90deg, #000 0, #000 86%, transparent 100%);
+    }
+    .title span { display: inline-block; will-change: transform; }
+    /* Título comprido anda sozinho e volta, sem cortar o nome. */
+    .title.roll span { animation: roll 11s var(--ease) infinite; }
+    @keyframes roll {
+      0%, 14%   { transform: translateX(0); }
+      50%, 64%  { transform: translateX(var(--shift, 0)); }
+      97%, 100% { transform: translateX(0); }
+    }
+    .artist {
+      margin-top: 2px;
+      font-size: 12px;
+      font-weight: 500;
+      color: rgba(255,255,255,.45);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .scrub { display: flex; flex-direction: column; gap: 8px; }
+    .bar {
+      position: relative;
+      height: 4px;
+      border-radius: 99px;
+      background: rgba(255,255,255,.1);
+    }
+    .bar-fill {
+      position: relative;
+      height: 100%;
+      width: 0;
+      border-radius: 99px;
+      background: linear-gradient(90deg, #a78bfa, #e879f9);
+      transition: width .95s linear;
+    }
+    .bar-fill::after {
+      content: '';
+      position: absolute;
+      right: -4px;
+      top: 50%;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #fff;
+      box-shadow: 0 0 8px #fff;
+      transform: translateY(-50%);
+    }
+    .scrub-times {
+      display: flex;
+      justify-content: space-between;
+      font-size: 10px;
+      font-weight: 600;
+      color: rgba(255,255,255,.35);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .transport {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      flex: none;
+    }
+    button.ctrl {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      color: rgba(255,255,255,.65);
+      transition: background .2s ease, color .2s ease, transform .3s var(--spring);
+    }
+    button.ctrl svg { width: 16px; height: 16px; display: block; }
+    button.ctrl svg[hidden] { display: none; }
+    button.ctrl:hover { background: rgba(255,255,255,.1); color: #fff; }
+    button.ctrl:active { transform: scale(.92); }
+    button.ctrl.play {
+      width: 36px;
+      height: 36px;
+      background: #fff;
+      color: #000;
+    }
+    button.ctrl.play svg { width: 14px; height: 14px; }
+    button.ctrl.play:hover { background: #fff; color: #000; transform: scale(1.05); }
+
+    /* ── Timer expandido ──────────────────────────── */
+    .face[data-face="expanded-timer"] {
+      padding: 16px 18px 26px;
+      display: flex;
+      flex-direction: column;
+    }
+    .timer-head { display: flex; align-items: center; gap: 14px; }
+    .timer-copy { flex: 1; min-width: 0; }
+    .kicker {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,.45);
+    }
+    .detail {
+      margin-top: 2px;
+      font-size: 12px;
+      color: rgba(255,255,255,.35);
+    }
+    .timer-big {
+      margin-top: 2px;
+      font-size: 32px;
+      font-weight: 600;
+      letter-spacing: -0.04em;
+      line-height: 1;
+      font-variant-numeric: tabular-nums;
+    }
+    .actions { margin-top: auto; display: flex; gap: 6px; align-items: center; }
+    .blob.expanded-timer {
+      box-shadow:
+        0 24px 80px rgba(0,0,0,.45),
+        inset 0 0 0 1px rgba(167,139,250,.22);
+    }
+
+    .pill {
+      height: 31px;
+      padding: 0 15px;
+      border-radius: 999px;
+      background: rgba(255,255,255,.13);
+      box-shadow: inset 0 0 0 .5px rgba(255,255,255,.1);
+      color: #fff;
+      font-size: 13px;
+      font-weight: 600;
+      transition: background .2s ease, transform .3s var(--spring);
+    }
+    .pill:hover { background: rgba(255,255,255,.22); }
+    .pill:active { transform: scale(.95); }
+    .pill.danger { background: rgba(255,69,58,.18); color: #ff6b61; }
+    .pill.danger:hover { background: rgba(255,69,58,.3); }
+
+    /* ── Relógio expandido ────────────────────────── */
+    .face[data-face="expanded-status"],
+    .face[data-face="power"] {
+      padding: 18px 20px 28px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+    .clock-big {
+      margin-top: 4px;
+      font-size: 32px;
+      font-weight: 600;
+      letter-spacing: -0.04em;
+      line-height: 1;
+      font-variant-numeric: tabular-nums;
+    }
+    .date-line {
+      margin-top: 6px;
+      font-size: 12px;
+      font-weight: 500;
+      color: rgba(255,255,255,.35);
+    }
+
+    /* Bandeja embutida: separa bateria e atalhos do bloco do relógio. */
+    .tray {
+      margin-top: auto;
+      width: 100%;
+      height: 42px;
+      padding: 0 11px;
+      border-radius: 21px;
+      background: rgba(255,255,255,.06);
+      box-shadow: inset 0 0 0 .5px rgba(255,255,255,.08);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .no-battery .tray { justify-content: center; }
+
+    /* Bateria desenhada, com o nível preenchido de verdade. */
+    .battery {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12.5px;
+      font-weight: 600;
+      color: rgba(255,255,255,.8);
+    }
+    .batt-shell {
+      position: relative;
+      width: 26px;
+      height: 13px;
+      border-radius: 4px;
+      box-shadow: inset 0 0 0 1.2px rgba(255,255,255,.4);
+    }
+    .batt-shell::after {
+      content: '';
+      position: absolute;
+      top: 4px;
+      right: -3.4px;
+      width: 2.4px;
+      height: 5px;
+      border-radius: 0 2px 2px 0;
+      background: rgba(255,255,255,.4);
+    }
+    .batt-level {
+      position: absolute;
+      top: 2.4px;
+      left: 2.4px;
+      height: 8.2px;
+      width: 0;
+      border-radius: 2px;
+      background: #fff;
+      transition: width .6s var(--ease), background .3s ease;
+    }
+    .battery.charging .batt-level { background: #30d158; box-shadow: 0 0 8px rgba(48,209,88,.8); }
+    .battery.low .batt-level { background: #ff453a; box-shadow: 0 0 8px rgba(255,69,58,.8); }
+    .battery.charging { color: #30d158; }
+    .battery.low { color: #ff6b61; }
+    #battery-bolt { filter: drop-shadow(0 0 5px rgba(48,209,88,.9)); }
+
+    .chips { display: flex; gap: 6px; }
+    .chip {
+      height: 28px;
+      padding: 0 11px;
+      border-radius: 999px;
+      background: rgba(255,255,255,.1);
+      box-shadow: inset 0 0 0 .5px rgba(255,255,255,.1);
+      color: rgba(255,255,255,.88);
+      font-size: 12px;
+      font-weight: 650;
+      font-variant-numeric: tabular-nums;
+      transition: background .2s ease, color .2s ease, transform .3s var(--spring);
+    }
+    .chip:hover {
+      background: rgba(139,92,246,.22);
+      color: #ddd6fe;
+      transform: translateY(-1px);
+    }
+    .chip:active { transform: scale(.93); }
+
+    .power-hero {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    /* ── Alertas ──────────────────────────────────── */
+    .face[data-face="alert"] {
+      height: 100%;
+      display: flex;
+      align-items: center;
+      gap: 13px;
+      padding: 0 18px;
+    }
+    .alert-glyph { position: relative; display: flex; flex: none; }
+    .alert-glyph .g { display: none; }
+    .kind-charge .g-charge { display: block; color: #30d158; filter: drop-shadow(0 0 7px rgba(48,209,88,.85)); }
+    .kind-low    .g-low    { display: block; color: #ff453a; filter: drop-shadow(0 0 7px rgba(255,69,58,.8)); }
+    .kind-timer  .g-timer  { display: block; color: #ff9f0a; filter: drop-shadow(0 0 7px rgba(255,159,10,.8)); }
+    .kind-notif  .g-notif  { display: block; color: #fff; }
+
+    /* O ícone do alerta respira enquanto o aviso está na tela. */
+    @keyframes breathe {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50%      { transform: scale(1.12); opacity: .82; }
+    }
+    .kind-charge .alert-glyph,
+    .kind-low .alert-glyph,
+    .kind-timer .alert-glyph { animation: breathe 1.5s ease-in-out infinite; }
+
+    .alert-copy { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+    .blob.alert-inline .alert-copy { flex-direction: row; align-items: baseline; gap: 8px; }
+    .alert-title {
+      font-size: 11px;
+      font-weight: 650;
+      letter-spacing: .07em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,.46);
+    }
+    .blob.alert-inline .alert-title {
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+      text-transform: none;
+      color: #fff;
+    }
+    .alert-sub {
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .blob.alert-inline .alert-sub {
+      font-size: 13px;
+      font-weight: 600;
+      color: rgba(255,255,255,.58);
+    }
+  </style>
+</head>
+<body>
+  <div id="borda"></div>
+  <div id="cluster" class="away">
+    <div id="ilha" class="blob rest">
+      <div class="face on" data-face="rest">
+        <span class="rest-time" id="clock">--:--</span>
+      </div>
+
+      <div class="face" data-face="music-compact">
+        <div class="row">
+          <div class="art art-sm" data-art>
+            <svg class="fallback" viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M9 17.5a2.5 2.5 0 1 1-2-2.45V6.8l10-2v9.25a2.5 2.5 0 1 1-2-2.45V7.2l-6 1.2v9.1z"/></svg>
+          </div>
+          <div class="eq" id="eq">
+            <span></span><span></span><span></span><span></span>
+          </div>
+          <span class="live-bolt" id="music-bolt" hidden>
+            <svg viewBox="0 0 24 24" width="13" height="13"><path fill="currentColor" d="M13 2 4.5 13.2h6.2L9.8 22 19.5 9.6h-6.2L13 2z"/></svg>
+          </span>
+        </div>
+      </div>
+
+      <div class="face" data-face="power">
+        <div class="kicker" id="power-kicker">Energia</div>
+        <div class="power-hero">
+          <div>
+            <div class="timer-big" id="power-pct">--%</div>
+            <div class="detail" id="power-detail">—</div>
+          </div>
+          <div class="battery" id="battery-row">
+            <div class="batt-shell"><div class="batt-level" id="batt-level"></div></div>
+            <svg id="battery-bolt" viewBox="0 0 24 24" width="12" height="12" hidden><path fill="currentColor" d="M13 2 4.5 13.2h6.2L9.8 22 19.5 9.6h-6.2L13 2z"/></svg>
+            <span id="battery-label"></span>
+          </div>
+          <svg class="ring ring-lg" viewBox="0 0 44 44">
+            <circle class="bg" cx="22" cy="22" r="19"/>
+            <circle class="fill" id="ring-power" cx="22" cy="22" r="19"/>
+          </svg>
+        </div>
+      </div>
+
+      <div class="face" data-face="charge">
+        <div class="charge-row">
+          <span class="charge-orb">
+            <svg viewBox="0 0 24 24"><path fill="currentColor" d="M13 2 4.5 13.2h6.2L9.8 22 19.5 9.6h-6.2L13 2z"/></svg>
+          </span>
+          <span class="charge-pct" id="charge-pct">--%</span>
+        </div>
+      </div>
+
+      <div class="face" data-face="timer-compact">
+        <div class="row timer">
+          <svg class="ring ring-sm" viewBox="0 0 24 24">
+            <circle class="bg" cx="12" cy="12" r="9.5"/>
+            <circle class="fill" id="ring-sm" cx="12" cy="12" r="9.5"/>
+          </svg>
+          <span class="compact-time" id="timer-compact">0:00</span>
+        </div>
+      </div>
+
+      <div class="face" data-face="music-min">
+        <div class="art art-fill" data-art>
+          <svg class="fallback" viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M9 17.5a2.5 2.5 0 1 1-2-2.45V6.8l10-2v9.25a2.5 2.5 0 1 1-2-2.45V7.2l-6 1.2v9.1z"/></svg>
+        </div>
+      </div>
+
+      <div class="face" data-face="expanded-music">
+        <div class="music-top">
+          <div class="art art-lg" data-art>
+            <svg class="fallback" viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M9 17.5a2.5 2.5 0 1 1-2-2.45V6.8l10-2v9.25a2.5 2.5 0 1 1-2-2.45V7.2l-6 1.2v9.1z"/></svg>
+          </div>
+          <div class="music-copy">
+            <div class="title" id="title-box"><span id="song-title">Música</span></div>
+            <div class="artist" id="song-artist"></div>
+          </div>
+          <div class="transport">
+            <button class="ctrl" id="btn-prev" type="button" aria-label="Anterior">
+              <svg viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M14.5 6.5 8.5 12l6 5.5"/></svg>
+            </button>
+            <button class="ctrl play" id="btn-play" type="button" aria-label="Reproduzir ou pausar">
+              <svg id="icon-pause" viewBox="0 0 24 24"><path fill="currentColor" d="M6.2 4.8h3.6v14.4H6.2zm8 0h3.6v14.4h-3.6z"/></svg>
+              <svg id="icon-play" viewBox="0 0 24 24" hidden><path fill="currentColor" d="M8.2 5.4v13.2c0 .7.8 1.1 1.4.7l9.4-6.6a.9.9 0 0 0 0-1.4L9.6 4.7c-.6-.4-1.4 0-1.4.7z"/></svg>
+            </button>
+            <button class="ctrl" id="btn-next" type="button" aria-label="Próxima">
+              <svg viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="m9.5 6.5 6 5.5-6 5.5"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="hairline"></div>
+        <div class="scrub">
+          <div class="scrub-times">
+            <span id="time-now">0:00</span>
+            <span id="time-left">0:00</span>
+          </div>
+          <div class="bar"><div class="bar-fill" id="progress"></div></div>
+        </div>
+      </div>
+
+      <div class="face" data-face="expanded-timer">
+        <div class="timer-head">
+          <div class="timer-copy">
+            <div class="kicker">Foco</div>
+            <div class="timer-big" id="timer-display">0:00</div>
+            <div class="detail" id="timer-state">Em andamento</div>
+          </div>
+          <svg class="ring ring-lg" viewBox="0 0 44 44">
+            <circle class="bg" cx="22" cy="22" r="19"/>
+            <circle class="fill" id="ring-lg" cx="22" cy="22" r="19"/>
+          </svg>
+        </div>
+        <div class="actions">
+          <button class="chip" type="button" data-min="5">5 min</button>
+          <button class="chip" type="button" data-min="15">15 min</button>
+          <button class="chip" type="button" data-min="25">25 min</button>
+          <button class="pill" id="btn-timer-toggle" type="button">Pausar</button>
+          <button class="pill danger" id="btn-timer-stop" type="button">Parar</button>
+        </div>
+      </div>
+
+      <div class="face" data-face="expanded-status">
+        <div class="kicker">Agora</div>
+        <div class="clock-big" id="clock-big">--:--</div>
+        <div class="date-line" id="date-line"></div>
+      </div>
+
+      <div class="face" data-face="alert">
+        <div class="alert-glyph">
+          <svg class="g g-charge" viewBox="0 0 24 24" width="19" height="19"><path fill="currentColor" d="M13 2 4.5 13.2h6.2L9.8 22 19.5 9.6h-6.2L13 2z"/></svg>
+          <svg class="g g-low" viewBox="0 0 28 14" width="25" height="13"><rect x=".8" y=".8" width="22" height="12.4" rx="3.2" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="24" y="4.2" width="2.4" height="5.6" rx="1" fill="currentColor"/><rect x="2.6" y="2.6" width="6" height="8.8" rx="1.4" fill="currentColor"/></svg>
+          <svg class="g g-timer" viewBox="0 0 24 24" width="26" height="26"><circle cx="12" cy="13.2" r="7" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 13.2V9.2M9.6 3.2h4.8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+          <svg class="g g-notif" viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M12 3.2a6.2 6.2 0 0 0-6.2 6.2v3.1L4.2 15v1.4h15.6V15l-1.6-2.5V9.4A6.2 6.2 0 0 0 12 3.2zM9.6 18.2a2.4 2.4 0 0 0 4.8 0z"/></svg>
+        </div>
+        <div class="alert-copy">
+          <div class="alert-title" id="alert-title"></div>
+          <div class="alert-sub" id="alert-sub"></div>
+        </div>
+      </div>
+      <div class="pager" id="pager">
+        <button type="button" data-i="0" aria-label="Música"></button>
+        <button type="button" data-i="1" aria-label="Bateria"></button>
+        <button type="button" data-i="2" aria-label="Timer"></button>
+        <button type="button" data-i="3" aria-label="Relógio"></button>
+      </div>
+    </div>
+
+    <div id="detached" class="blob">
+      <div class="face on" data-face="timer-min">
+        <span class="min-time" id="timer-min">0:00</span>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Apresentações da Dynamic Island: repouso, compacta, mínima, expandida e alerta.
+    // Id diferente de "island" de propósito: window.island é a ponte do preload.
+    const island = document.getElementById('ilha')
+    const cluster = document.getElementById('cluster')
+    const detached = document.getElementById('detached')
+    const raiz = document.documentElement
+
+    const music = { active: false, isPlaying: false, title: '', artist: '', art: '', progressMs: 0, durationMs: 0, stamp: 0 }
+    const timer = { active: false, running: false, end: 0, remainOnPause: 0, total: 0, fired: false }
+    let power = { available: false, percent: null, charging: false }
+    let avisouFraca = false
+    let alert = null
+    let alertTimer = null
+    let visual = ''
+    let hotLeave = null
+    let visitaTimer = null
+    let ponteiroEmCima = false
+    let pagina = 0
+    let gestoX = null
+    const PAGINAS = ['expanded-music', 'power', 'expanded-timer', 'expanded-status']
+
+    const VOLTA_ANEL_SM = 2 * Math.PI * 9.5
+    const VOLTA_ANEL_LG = 2 * Math.PI * 19
+
+    // Cor do halo por contexto: a capa manda na música, o resto tem cor própria.
+    const HALO = {
+      neutro: '128 138 168',
+      timer: '255 159 10',
+      charge: '48 209 88',
+      low: '255 69 58',
+    }
+    let haloDaCapa = HALO.neutro
+
+    function ajustarHalo(mode, kind) {
+      let cor = HALO.neutro
+      if (kind && HALO[kind]) cor = HALO[kind]
+      else if (mode === 'music-compact' || mode === 'minimal' || mode === 'expanded-music') cor = haloDaCapa
+      else if (mode === 'timer-compact' || mode === 'expanded-timer') cor = HALO.timer
+      else if (mode === 'charge' || mode === 'power') cor = power.charging ? HALO.charge : HALO.neutro
+      else if (power.charging) cor = HALO.charge
+      raiz.style.setProperty('--glow', cor)
+    }
+
+    function faceName(mode) {
+      if (mode === 'minimal') return 'music-min'
+      if (mode === 'alert-banner' || mode === 'alert-inline') return 'alert'
+      return mode
+    }
+
+    function resolveMode() {
+      if (!cluster.classList.contains('away')) return PAGINAS[pagina]
+      if (alert) return alert.layout
+      if (music.active && timer.active) return 'minimal'
+      if (music.active) return 'music-compact'
+      if (timer.active) return 'timer-compact'
+      if (power.charging) return 'charge'
+      return 'rest'
+    }
+
+    function renderLayout() {
+      const mode = resolveMode()
+      const kind = alert ? alert.kind : ''
+      const key = mode + '/' + kind + '/' + (power.charging ? 'c' : 'o') + '/' + (power.available ? 'b' : 'n')
+      ajustarHalo(mode, kind)
+      if (key !== visual) {
+        const mudouForma = visual !== ''
+        visual = key
+        island.className = 'blob ' + mode
+          + (kind ? ' kind-' + kind : '')
+          + (mode === 'expanded-status' && !power.available ? ' no-battery' : '')
+        cluster.classList.toggle('minimal', mode === 'minimal')
+        island.querySelectorAll('.face').forEach((face) => {
+          face.classList.toggle('on', face.dataset.face === faceName(mode))
+        })
+        // Reinicia o squish para ele tocar em toda troca de forma.
+        if (mudouForma) {
+          island.classList.remove('morph')
+          void island.offsetWidth
+          island.classList.add('morph')
+        }
+        if (mode === 'expanded-music') medirTitulo()
+        document.querySelectorAll('#pager button').forEach((botao, i) => {
+          botao.classList.toggle('on', i === pagina)
+        })
+      }
+      if (alert && (mode === 'alert-inline' || mode === 'alert-banner')) paintAlert()
+    }
+
+    function paintAlert() {
+      document.getElementById('alert-title').textContent = alert.title || ''
+      document.getElementById('alert-sub').textContent = alert.subtitle || ''
+    }
+
+    function mostrarIlha() {
+      cluster.classList.remove('away')
+    }
+
+    function esconderIlha() {
+      if (ponteiroEmCima) return
+      if (alert && alert.sticky) return
+      cluster.classList.add('away')
+    }
+
+    // Enquanto a pessoa usa o computador, a ilha desce devagar e volta a se esconder.
+    function aparecerPorUmTempo(ms) {
+      mostrarIlha()
+      clearTimeout(visitaTimer)
+      visitaTimer = setTimeout(esconderIlha, ms || 4000)
+    }
+
+    function pushAlert(next) {
+      alert = next
+      renderLayout()
+      clearTimeout(alertTimer)
+      if (next.ttl) alertTimer = setTimeout(dismissAlert, next.ttl)
+      aparecerPorUmTempo(next.sticky ? 8000 : (next.ttl || 4000))
+    }
+
+    function dismissAlert() {
+      alert = null
+      clearTimeout(alertTimer)
+      renderLayout()
+    }
+
+    function hora() {
+      return new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+    }
+
+    function paintClock() {
+      const t = hora()
+      document.getElementById('clock').textContent = t
+      document.getElementById('clock-big').textContent = t
+      const data = new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })
+      document.getElementById('date-line').textContent = data.charAt(0).toUpperCase() + data.slice(1)
+    }
+
+    function formatRemain(sec) {
+      const s = Math.max(0, Math.floor(sec))
+      const h = Math.floor(s / 3600)
+      const m = Math.floor((s % 3600) / 60)
+      const ss = s % 60
+      if (h > 0) return h + ':' + String(m).padStart(2, '0') + ':' + String(ss).padStart(2, '0')
+      return m + ':' + String(ss).padStart(2, '0')
+    }
+
+    function formatMs(ms) {
+      return formatRemain(Math.max(0, Math.floor((ms || 0) / 1000)))
+    }
+
+    function timerLeft() {
+      if (!timer.running) return timer.remainOnPause
+      return Math.max(0, Math.ceil((timer.end - Date.now()) / 1000))
+    }
+
+    function pintarAnel(id, volta, fracao) {
+      const el = document.getElementById(id)
+      el.style.strokeDasharray = volta
+      el.style.strokeDashoffset = volta * (1 - Math.max(0, Math.min(1, fracao)))
+    }
+
+    function paintTimer() {
+      const left = timerLeft()
+      const texto = formatRemain(left)
+      document.getElementById('timer-compact').textContent = texto
+      document.getElementById('timer-min').textContent = texto
+      document.getElementById('timer-display').textContent = texto
+      const pausado = timer.active && !timer.running
+      document.getElementById('timer-state').textContent = pausado ? 'Pausado' : 'Em andamento'
+      document.getElementById('btn-timer-toggle').textContent = pausado ? 'Retomar' : 'Pausar'
+      // Os anéis esvaziam conforme o tempo passa.
+      const fracao = timer.total ? left / timer.total : 0
+      pintarAnel('ring-sm', VOLTA_ANEL_SM, fracao)
+      pintarAnel('ring-lg', VOLTA_ANEL_LG, fracao)
+    }
+
+    function finishTimer() {
+      if (timer.fired) return
+      timer.fired = true
+      timer.active = false
+      timer.running = false
+      pushAlert({
+        layout: 'alert-banner',
+        kind: 'timer',
+        title: 'Timer',
+        subtitle: 'Tempo esgotado',
+        sticky: true,
+      })
+    }
+
+    function startIslandTimer(min) {
+      const minutos = Math.max(1, Number(min) || 1)
+      timer.active = true
+      timer.running = true
+      timer.fired = false
+      timer.end = Date.now() + minutos * 60 * 1000
+      timer.remainOnPause = minutos * 60
+      timer.total = minutos * 60
+      if (alert && alert.kind === 'timer') alert = null
+      paintTimer()
+      renderLayout()
+      aparecerPorUmTempo(4500)
+    }
+    window.startIslandTimer = startIslandTimer
+
+    function toggleTimerRun() {
+      if (!timer.active) return
+      if (timer.running) {
+        timer.remainOnPause = timerLeft()
+        timer.running = false
+      } else {
+        timer.end = Date.now() + timer.remainOnPause * 1000
+        timer.running = true
+      }
+      paintTimer()
+    }
+
+    function stopTimer() {
+      timer.active = false
+      timer.running = false
+      timer.fired = false
+      renderLayout()
+    }
+
+    // A cor viva da capa vira o halo da cápsula e o brilho dos detalhes.
+    function extrairCor(url) {
+      const img = new Image()
+      img.onload = () => {
+        try {
+          const lona = document.createElement('canvas')
+          lona.width = 18
+          lona.height = 18
+          const ctx = lona.getContext('2d')
+          ctx.drawImage(img, 0, 0, 18, 18)
+          const px = ctx.getImageData(0, 0, 18, 18).data
+          let r = 0, g = 0, b = 0, n = 0
+          for (let i = 0; i < px.length; i += 4) {
+            const maior = Math.max(px[i], px[i + 1], px[i + 2])
+            const menor = Math.min(px[i], px[i + 1], px[i + 2])
+            // Ignora pixels escuros ou acinzentados: o halo vem das cores fortes.
+            if (maior < 46 || maior - menor < 20) continue
+            r += px[i]; g += px[i + 1]; b += px[i + 2]; n++
+          }
+          if (!n) { r = 140; g = 140; b = 150; n = 1 }
+          r = Math.round(r / n); g = Math.round(g / n); b = Math.round(b / n)
+          haloDaCapa = r + ' ' + g + ' ' + b
+          ajustarHalo(resolveMode(), alert ? alert.kind : '')
+        } catch (erro) {
+          haloDaCapa = HALO.neutro
+        }
+      }
+      img.src = url
+    }
+
+    function applyArt(url) {
+      document.querySelectorAll('[data-art]').forEach((el) => {
+        if (!url) {
+          el.style.backgroundImage = ''
+          el.classList.remove('has-art')
+          return
+        }
+        el.style.backgroundImage = 'url("' + url + '")'
+        el.classList.add('has-art')
+        el.classList.remove('pop')
+        void el.offsetWidth
+        el.classList.add('pop')
+      })
+      if (url) extrairCor(url)
+    }
+
+    // Título longo precisa saber quanto sobrou para fora antes de rolar.
+    // A medida só vale depois que a cápsula terminou de crescer.
+    function medirTitulo() {
+      const caixa = document.getElementById('title-box')
+      const texto = document.getElementById('song-title')
+      if (caixa.clientWidth < 60) {
+        caixa.classList.remove('roll')
+        return
+      }
+      const sobra = texto.scrollWidth - caixa.clientWidth
+      if (sobra > 6) {
+        caixa.style.setProperty('--shift', '-' + sobra + 'px')
+        caixa.classList.add('roll')
+      } else {
+        caixa.classList.remove('roll')
+      }
+    }
+    new ResizeObserver(medirTitulo).observe(document.getElementById('title-box'))
+
+    function paintMusic() {
+      document.getElementById('song-title').textContent = music.title || 'Música'
+      document.getElementById('song-artist').textContent = music.artist || ''
+      document.getElementById('eq').classList.toggle('paused', !music.isPlaying)
+      document.getElementById('progress').classList.toggle('still', !music.isPlaying)
+      document.getElementById('icon-pause').hidden = !music.isPlaying
+      document.getElementById('icon-play').hidden = music.isPlaying
+      medirTitulo()
+    }
+
+    function paintProgress() {
+      const decorrido = music.isPlaying ? Date.now() - music.stamp : 0
+      const atual = Math.min(music.progressMs + decorrido, music.durationMs || music.progressMs + decorrido)
+      const pct = music.durationMs ? (atual / music.durationMs) * 100 : 0
+      document.getElementById('progress').style.width = Math.max(0, Math.min(100, pct)) + '%'
+      document.getElementById('time-now').textContent = formatMs(atual)
+      document.getElementById('time-left').textContent = music.durationMs ? formatMs(music.durationMs) : '–:–'
+    }
+
+    function paintBattery() {
+      const row = document.getElementById('battery-row')
+      row.hidden = !power.available
+      const fraca = power.available && !power.charging && power.percent <= 20
+      row.classList.toggle('charging', !!power.charging)
+      row.classList.toggle('low', fraca)
+      const aceso = !!power.charging
+      document.getElementById('battery-bolt').hidden = !aceso
+      document.getElementById('music-bolt').hidden = !aceso
+      const pct = power.available && power.percent != null ? power.percent + '%' : ''
+      document.getElementById('battery-label').textContent = pct
+      document.getElementById('charge-pct').textContent = pct || '--'
+      document.getElementById('power-pct').textContent = pct || '--'
+      document.getElementById('power-kicker').textContent = 'Energia'
+      const detalhe = document.getElementById('power-detail')
+      if (!power.available) detalhe.textContent = 'Sem bateria'
+      else if (power.charging) detalhe.textContent = 'Carregando'
+      else if (fraca) detalhe.textContent = 'Bateria fraca'
+      else detalhe.textContent = 'Na bateria'
+      const anel = document.getElementById('ring-power')
+      anel.style.stroke = power.charging ? '#30d158' : 'rgba(255,255,255,.85)'
+      pintarAnel('ring-power', VOLTA_ANEL_LG, (power.percent || 0) / 100)
+      // 21px é o espaço útil dentro do desenho da bateria.
+      const nivel = power.available ? Math.max(2, (power.percent / 100) * 21) : 0
+      document.getElementById('batt-level').style.width = nivel + 'px'
+    }
+
+    island.addEventListener('pointerdown', (event) => {
+      if (event.target.closest('button')) return
+      gestoX = event.clientX
+      window.island?.segurar(true)
+    })
+    window.addEventListener('pointerup', (event) => {
+      window.island?.segurar(false)
+      if (gestoX == null) return
+      const dx = event.clientX - gestoX
+      gestoX = null
+      if (cluster.classList.contains('away') || Math.abs(dx) < 42) return
+      pagina = dx < 0 ? Math.min(PAGINAS.length - 1, pagina + 1) : Math.max(0, pagina - 1)
+      renderLayout()
+    })
+    document.querySelectorAll('#pager button').forEach((botao) => {
+      botao.addEventListener('click', (event) => {
+        event.stopPropagation()
+        pagina = Number(botao.dataset.i) || 0
+        renderLayout()
+      })
+    })
+    detached.addEventListener('click', () => {
+      pagina = 2
+      aparecerPorUmTempo(4500)
+      renderLayout()
+    })
+
+    document.getElementById('btn-prev').addEventListener('click', (event) => {
+      event.stopPropagation()
+      window.island?.mediaCommand('prev')
+    })
+    document.getElementById('btn-next').addEventListener('click', (event) => {
+      event.stopPropagation()
+      window.island?.mediaCommand('next')
+    })
+    document.getElementById('btn-play').addEventListener('click', (event) => {
+      event.stopPropagation()
+      music.isPlaying = !music.isPlaying
+      paintMusic()
+      window.island?.mediaCommand('playpause')
+    })
+    document.getElementById('btn-timer-toggle').addEventListener('click', (event) => {
+      event.stopPropagation()
+      toggleTimerRun()
+    })
+    document.getElementById('btn-timer-stop').addEventListener('click', (event) => {
+      event.stopPropagation()
+      stopTimer()
+    })
+    document.querySelectorAll('.chip').forEach((chip) => {
+      chip.addEventListener('click', (event) => {
+        event.stopPropagation()
+        startIslandTimer(chip.dataset.min)
+      })
+    })
+
+    // Sair da cápsula equivale a tocar fora: a expandida recolhe.
+    cluster.addEventListener('mouseleave', () => {
+      clearTimeout(hotLeave)
+      hotLeave = setTimeout(() => {
+        if (alert && alert.sticky) return
+        if (alert && !alert.sticky) {
+          alert = null
+          renderLayout()
+        }
+      }, 420)
+    })
+    cluster.addEventListener('mouseenter', () => clearTimeout(hotLeave))
+
+    // Informa o retângulo real da cápsula. Fora dele o clique continua no Windows.
+    function publicarHitbox() {
+      const rects = []
+      const borda = document.getElementById('borda').getBoundingClientRect()
+      rects.push({ x: borda.left, y: 0, w: borda.width, h: 12 })
+      document.querySelectorAll('.blob').forEach((blob) => {
+        const r = blob.getBoundingClientRect()
+        if (r.width < 4 || r.height < 4) return
+        const topo = Math.max(0, r.top - 4)
+        const baixo = r.bottom + 8
+        if (baixo <= 0) return
+        rects.push({ x: r.left - 6, y: topo, w: r.width + 12, h: baixo - topo })
+      })
+      window.island?.setHitbox(rects)
+    }
+    setInterval(publicarHitbox, 50)
+    publicarHitbox()
+
+    window.island?.onPointer((dentro) => {
+      ponteiroEmCima = dentro
+      if (dentro) {
+        clearTimeout(hotLeave)
+        clearTimeout(visitaTimer)
+        if (cluster.classList.contains('away')) pagina = music.active ? 0 : 3
+        mostrarIlha()
+        renderLayout()
+        return
+      }
+      clearTimeout(hotLeave)
+      hotLeave = setTimeout(() => {
+        if (alert && alert.sticky) return
+        if (alert && !alert.sticky) alert = null
+        esconderIlha()
+        renderLayout()
+      }, 550)
+    })
+
+    window.island?.onSpotifyUpdate((data) => {
+      if (!data || !data.playing) {
+        const tinha = music.active
+        music.active = false
+        music.isPlaying = false
+        if (tinha) renderLayout()
+        return
+      }
+      const entrou = !music.active
+      music.active = true
+      music.isPlaying = data.isPlaying !== false
+      music.title = data.title || 'Sem título'
+      music.artist = data.artist || ''
+      music.progressMs = data.progressMs || 0
+      music.durationMs = data.durationMs || 0
+      music.stamp = Date.now()
+      if (data.art) {
+        music.art = data.art
+        applyArt(data.art)
+      }
+      paintMusic()
+      paintProgress()
+      if (entrou) pagina = 0
+      renderLayout()
+      if (entrou) aparecerPorUmTempo(4500)
+    })
+
+    window.island?.onPower((data) => {
+      const antes = !!power.charging
+      power = {
+        available: !!(data && data.available),
+        percent: data && data.percent != null ? data.percent : null,
+        charging: !!(data && data.charging),
+      }
+      paintBattery()
+      renderLayout()
+      if (power.charging && !antes) aparecerPorUmTempo(5000)
+      if (!power.available) return
+      if (power.charging || power.percent > 20) avisouFraca = false
+      else if (!avisouFraca) {
+        avisouFraca = true
+        pushAlert({
+          layout: 'alert-inline',
+          kind: 'low',
+          title: 'Bateria fraca',
+          subtitle: power.percent + '%',
+          ttl: 3400,
+        })
+      }
+    })
+
+    setInterval(() => {
+      paintClock()
+      if (timer.active) {
+        if (timer.running && timerLeft() <= 0) finishTimer()
+        else paintTimer()
+      }
+      if (music.active) paintProgress()
+    }, 250)
+
+    paintClock()
+    renderLayout()
+
+    window.showNotification = function (app, msg) {
+      pushAlert({
+        layout: 'alert-banner',
+        kind: 'notif',
+        title: app || 'Aviso',
+        subtitle: msg || '',
+        ttl: 4200,
+      })
+    }
+    window.showMusic = function () {
+      pagina = 0
+      mostrarIlha()
+      renderLayout()
+    }
+    window.showTimer = function () {
+      pagina = 2
+      aparecerPorUmTempo(4500)
+      renderLayout()
+    }
+    window.showIdle = function () {
+      dismissAlert()
+      esconderIlha()
+      renderLayout()
+    }
+  </script>
+</body>
+</html>
