@@ -10,7 +10,7 @@ const { onSessionsChanged, shutdown } = require('windows-media-sessions')
 const SPOTIFY_CLIENT_ID = 'COLE_SEU_CLIENT_ID'
 const SPOTIFY_CLIENT_SECRET = 'COLE_SEU_CLIENT_SECRET'
 const SPOTIFY_REDIRECT_URI = 'http://127.0.0.1:8888/callback'
-const SPOTIFY_SCOPES = 'user-read-currently-playing'
+const SPOTIFY_SCOPES = 'user-read-currently-playing user-modify-playback-state'
 
 let islandWindow = null
 let tray = null
@@ -101,6 +101,7 @@ function createIsland() {
   islandWindow.webContents.on('did-finish-load', () => {
     if (!islandWindow || islandWindow.isDestroyed()) return
     islandWindow.webContents.send('spotify-update', ultimoPayload)
+    islandWindow.webContents.send('power-update', ultimaBateria)
     paginaPronta = true
   })
 
@@ -165,49 +166,98 @@ function dispararTimer(minutos) {
 
 function enviarPower(payload) {
   ultimaBateria = { ...ultimaBateria, ...payload }
+  if (!ultimaBateria.available) {
+    ultimaBateria.charging = false
+    ultimaBateria.percent = null
+  }
   if (!islandWindow || islandWindow.isDestroyed()) return
   islandWindow.webContents.send('power-update', ultimaBateria)
+}
+
+const SCRIPT_BATERIA = `
+$ErrorActionPreference = 'SilentlyContinue'
+$percent = $null
+$charging = $false
+$status = $null
+foreach ($b in Get-CimInstance -ClassName Win32_Battery) {
+  if ($null -eq $b.EstimatedChargeRemaining) { continue }
+  $pct = [int]$b.EstimatedChargeRemaining
+  if ($null -eq $percent -or $pct -gt $percent) { $percent = $pct }
+  $st = [int]$b.BatteryStatus
+  if ($null -eq $status) { $status = $st }
+  if ($st -ge 6 -and $st -le 9) { $charging = $true }
+  if ($st -eq 1) { $charging = $false }
+}
+foreach ($w in Get-CimInstance -Namespace root/wmi -ClassName BatteryStatus) {
+  if ($w.Charging -eq $true) { $charging = $true }
+  if ($w.Discharging -eq $true) { $charging = $false }
+  if ($null -ne $w.ChargeRate -and [int]$w.ChargeRate -gt 0) { $charging = $true }
+}
+if ($status -eq 3 -and $percent -ge 98) { $charging = $false }
+if ($null -eq $percent) {
+  @{ available = $false; percent = $null; charging = $false } | ConvertTo-Json -Compress
+} else {
+  @{ available = $true; percent = $percent; charging = [bool]$charging } | ConvertTo-Json -Compress
+}
+`
+
+let scriptBateria = null
+
+function garantirScriptBateria() {
+  if (scriptBateria) return scriptBateria
+  scriptBateria = path.join(app.getPath('temp'), 'dynamic-island-bateria.ps1')
+  fs.writeFileSync(scriptBateria, SCRIPT_BATERIA)
+  return scriptBateria
 }
 
 // Percentual real da bateria do notebook. Desktop sem bateria manda available:false.
 function lerBateria() {
   if (lendoBateria || process.platform !== 'win32') return
   lendoBateria = true
-  const comando = "(Get-CimInstance -ClassName Win32_Battery -ErrorAction SilentlyContinue | Select-Object -First 1 EstimatedChargeRemaining, BatteryStatus | ConvertTo-Json -Compress)"
-  execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', comando], { windowsHide: true }, (erro, stdout) => {
-    lendoBateria = false
-    const texto = (stdout || '').trim()
-    if (erro || !texto || texto === 'null') {
-      enviarPower({ available: false })
-      return
-    }
-    try {
-      const item = JSON.parse(texto)
-      const bateria = Array.isArray(item) ? item[0] : item
-      if (!bateria || bateria.EstimatedChargeRemaining == null) {
-        enviarPower({ available: false })
+  const arquivo = garantirScriptBateria()
+  execFile(
+    'powershell.exe',
+    ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', arquivo],
+    { windowsHide: true },
+    (erro, stdout) => {
+      lendoBateria = false
+      const texto = (stdout || '').trim()
+      if (erro || !texto || texto === 'null') {
+        enviarPower({ available: false, charging: false, percent: null })
         return
       }
-      const status = Number(bateria.BatteryStatus)
-      // 6–9 é carga de verdade. 2 é só "na tomada" e 3 é bateria cheia: a luz fica apagada.
-      const charging = [6, 7, 8, 9].includes(status)
-      enviarPower({ available: true, percent: Number(bateria.EstimatedChargeRemaining), charging })
-    } catch {
-      enviarPower({ available: false })
+      try {
+        const dados = JSON.parse(texto)
+        if (!dados.available) {
+          enviarPower({ available: false, charging: false, percent: null })
+          return
+        }
+        enviarPower({
+          available: true,
+          percent: Number(dados.percent),
+          charging: !!dados.charging,
+        })
+      } catch {
+        enviarPower({ available: false, charging: false, percent: null })
+      }
     }
-  })
+  )
+}
+
+function lerBateriaComAtraso() {
+  lerBateria()
+  setTimeout(lerBateria, 1500)
+  setTimeout(lerBateria, 4500)
 }
 
 function iniciarBateria() {
   lerBateria()
-  bateriaTimer = setInterval(lerBateria, 8000)
-  // Saiu da tomada: apaga na hora, sem esperar a próxima leitura.
+  bateriaTimer = setInterval(lerBateria, 5000)
   powerMonitor.on('on-battery', () => {
     enviarPower({ charging: false })
     lerBateria()
   })
-  // Entrou na tomada: só acende se o Windows confirmar que está carregando.
-  powerMonitor.on('on-ac', () => lerBateria())
+  powerMonitor.on('on-ac', () => lerBateriaComAtraso())
 }
 
 // Mostra ou oculta a ilha, igual aos itens da bandeja
@@ -281,9 +331,22 @@ function enviarSpotify(payload) {
   islandWindow.webContents.send('spotify-update', payload)
 }
 
-// Prefere o que está tocando; se só houver pausa, ainda mostra a faixa
+function limparMusicaIlha() {
+  arteEnviadaPara = ''
+  ultimoPayload = { playing: false }
+  enviarSpotify({ playing: false })
+}
+
+function sessaoComMidia(sessao) {
+  if (!sessao || !String(sessao.title || '').trim()) return false
+  const estado = sessao.playbackStatus
+  if (estado === 'closed' || estado === 'stopped') return false
+  return estado === 'playing' || estado === 'paused'
+}
+
+// Qualquer app (Spotify, Edge, YouTube…). Sem faixa ativa, a ilha zera a área de música.
 function escolherSessao(sessions) {
-  const faixas = (sessions || []).filter((sessao) => sessao && sessao.title)
+  const faixas = (sessions || []).filter(sessaoComMidia)
   return faixas.find((sessao) => sessao.playbackStatus === 'playing')
     || faixas.find((sessao) => sessao.playbackStatus === 'paused')
     || null
@@ -292,8 +355,7 @@ function escolherSessao(sessions) {
 function publicarSessoes(sessions) {
   const sessao = escolherSessao(sessions)
   if (!sessao) {
-    arteEnviadaPara = ''
-    enviarSpotify({ playing: false })
+    limparMusicaIlha()
     return
   }
 
@@ -306,8 +368,6 @@ function publicarSessoes(sessions) {
     progressMs: (sessao.timeline && sessao.timeline.positionMs) || 0,
     durationMs: (sessao.timeline && sessao.timeline.durationMs) || 0,
   }
-  // A capa é grande; manda de novo só quando a faixa muda.
-  // Antes da página abrir, manda sempre para o primeiro frame não ficar sem imagem.
   if (sessao.thumbnail && (arteEnviadaPara !== chave || !paginaPronta)) {
     payload.art = sessao.thumbnail
     arteEnviadaPara = chave
@@ -322,7 +382,10 @@ function iniciarMidiaWindows() {
 }
 
 const SCRIPT_MIDIA = `
-param([string]$cmd = 'playpause')
+param(
+  [Parameter(Position = 0)][string]$cmd = 'playpause',
+  [Parameter(Position = 1)][long]$positionMs = 0
+)
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Runtime.WindowsRuntime
 $null = [Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager, Windows.Media.Control, ContentType = WindowsRuntime]
@@ -348,6 +411,11 @@ if (-not $session) { Write-Output 'SEM_ALVO'; exit 0 }
 $op = switch ($cmd) {
   'next' { $session.TrySkipNextAsync() }
   'prev' { $session.TrySkipPreviousAsync() }
+  'seek' {
+    $posMs = [Math]::Max(0, $positionMs)
+    $ticks = [TimeSpan]::FromMilliseconds([double]$posMs).Ticks
+    $session.TryChangePlaybackPositionAsync([int64]$ticks)
+  }
   default { $session.TryTogglePlayPauseAsync() }
 }
 $ok = Await $op ([bool])
@@ -358,25 +426,27 @@ let scriptMidia = null
 let ultimoToqueMidia = 0
 
 function garantirScriptMidia() {
-  if (scriptMidia) return scriptMidia
-  scriptMidia = path.join(app.getPath('temp'), 'dynamic-island-media.ps1')
-  fs.writeFileSync(scriptMidia, SCRIPT_MIDIA)
+  const arquivo = path.join(app.getPath('temp'), 'dynamic-island-media.ps1')
+  fs.writeFileSync(arquivo, SCRIPT_MIDIA)
+  scriptMidia = arquivo
   return scriptMidia
 }
 
-// Manda play, pausa e troca de faixa para a sessão que o Windows está tocando.
-function enviarTeclaMidia(comando) {
-  const permitidos = ['playpause', 'next', 'prev']
+// Manda play, pausa, troca de faixa e seek para a sessão que o Windows está tocando.
+function enviarTeclaMidia(comando, positionMs = 0) {
+  const permitidos = ['playpause', 'next', 'prev', 'seek']
   if (!permitidos.includes(comando)) return
   const arquivo = garantirScriptMidia()
+  const args = ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', arquivo, comando]
+  if (comando === 'seek') args.push(String(Math.max(0, Math.round(positionMs))))
   execFile(
     'powershell.exe',
-    ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', arquivo, comando],
+    args,
     { windowsHide: true },
     (erro, stdout, stderr) => {
       const saida = `${stdout || ''} ${stderr || ''}`.trim()
       if (erro) console.error('Mídia:', erro.message, saida)
-      else if (saida) console.log('Mídia:', saida)
+      else if (/OK=False/i.test(saida)) console.warn('Mídia:', saida)
     }
   )
 }
@@ -388,6 +458,34 @@ ipcMain.on('media-command', (_event, comando) => {
   enviarTeclaMidia(comando)
 })
 
+async function seekSpotify(positionMs) {
+  if (!accessToken) return
+  try {
+    if (Date.now() >= tokenExpiresAt - 30000) await atualizarAccessToken()
+    const resposta = await fetch(
+      `https://api.spotify.com/v1/me/player/seek?position_ms=${Math.round(positionMs)}`,
+      { method: 'PUT', headers: { Authorization: `Bearer ${accessToken}` } }
+    )
+    if (resposta.status === 401) {
+      await atualizarAccessToken()
+      await fetch(
+        `https://api.spotify.com/v1/me/player/seek?position_ms=${Math.round(positionMs)}`,
+        { method: 'PUT', headers: { Authorization: `Bearer ${accessToken}` } }
+      )
+    }
+  } catch (erro) {
+    console.error('Spotify seek:', erro.message)
+  }
+}
+
+ipcMain.on('media-seek', (_event, positionMs) => {
+  const ms = Number(positionMs)
+  if (!Number.isFinite(ms) || ms < 0) return
+  // SMTC usa ticks (100 ns); API do Spotify usa ms — não misturar unidades.
+  enviarTeclaMidia('seek', ms)
+  if (accessToken) seekSpotify(ms)
+})
+
 function nomeArtista(item) {
   if (Array.isArray(item.artists) && item.artists.length) {
     return item.artists.map((artista) => artista.name).filter(Boolean).join(', ')
@@ -396,8 +494,9 @@ function nomeArtista(item) {
   return 'Spotify'
 }
 
-// Consulta a faixa atual e avisa o renderer
+// Consulta a faixa atual e avisa o renderer (fallback; no Windows a sessão SMTC manda)
 async function consultarTocando(tentouRenovar = false) {
+  if (process.platform === 'win32' && pararSessoes) return
   if (!accessToken) return
   if (Date.now() >= tokenExpiresAt - 30000) await atualizarAccessToken()
 
@@ -411,14 +510,14 @@ async function consultarTocando(tentouRenovar = false) {
   }
   // 204 = nenhum dispositivo tocando
   if (resposta.status === 204) {
-    enviarSpotify({ playing: false })
+    limparMusicaIlha()
     return
   }
   if (!resposta.ok) throw new Error(`Player HTTP ${resposta.status}`)
 
   const dados = await resposta.json()
   if (!dados.is_playing || !dados.item) {
-    enviarSpotify({ playing: false })
+    limparMusicaIlha()
     return
   }
 

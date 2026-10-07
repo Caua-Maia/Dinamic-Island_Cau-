@@ -69,7 +69,8 @@
       justify-content: center;
       gap: 6px;
     }
-    #cluster.away .pager { display: none; }
+    #cluster.away .pager,
+    #cluster.away .blob-pager-footer { display: none; }
     .pager button {
       width: 6px;
       height: 6px;
@@ -165,9 +166,143 @@
     .blob.expanded-status {
       background: linear-gradient(145deg, rgba(30,31,42,.96), rgba(13,14,20,.98));
     }
-    .blob.expanded-music  { width: 420px; height: 148px; border-radius: 28px; }
+    .blob.expanded-music  {
+      width: 440px;
+      height: 226px;
+      border-radius: 28px;
+      border: 1px solid rgba(255,255,255,.09);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+    }
+    .blob.expanded-music.has-music-art::before {
+      opacity: .28;
+    }
+    .blob.expanded-music.has-music-art {
+      background: rgba(5, 5, 8, .32) !important;
+      box-shadow:
+        0 0 40px -8px rgb(var(--glow) / .55),
+        0 20px 50px -12px rgba(0,0,0,.55),
+        inset 0 1px rgba(255,255,255,.1);
+    }
+    .music-ambient {
+      position: absolute;
+      inset: 0;
+      z-index: 0;
+      border-radius: inherit;
+      overflow: hidden;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .55s var(--ease);
+    }
+    .blob.has-music-art.expanded-music .music-ambient,
+    .blob.expanded-music.is-music-live .music-ambient,
+    .blob.has-music-art.music-compact .music-ambient {
+      opacity: 1;
+    }
+    .music-ambient-bg {
+      position: absolute;
+      inset: -50%;
+      background: center/cover no-repeat;
+      filter: blur(46px) saturate(1.65) brightness(.8);
+      transform: scale(1.14);
+      transition: background-image .65s ease, transform .65s var(--ease);
+    }
+    .music-ambient-canvas {
+      position: absolute;
+      inset: -8%;
+      background: center/cover no-repeat;
+      opacity: 0;
+      filter: blur(10px) saturate(1.4);
+      transform: scale(1.08);
+      transition: background-image .65s ease, opacity .5s ease;
+    }
+    .blob.has-music-art.expanded-music .music-ambient-canvas {
+      opacity: .48;
+    }
+    .blob.expanded-music.is-music-live:not(.has-music-art) .music-ambient-bg {
+      inset: 0;
+      transform: none;
+      filter: none;
+      background:
+        radial-gradient(ellipse 110% 90% at 18% -10%, rgb(var(--glow) / .55), transparent 58%),
+        radial-gradient(ellipse 80% 70% at 92% 95%, rgb(var(--glow) / .38), transparent 52%),
+        linear-gradient(160deg, #14141c, #060608);
+    }
+    .blob.is-playing .music-ambient-bg {
+      animation: ambientDrift 14s ease-in-out infinite;
+    }
+    @keyframes ambientDrift {
+      0%, 100% { transform: scale(1.12) translate(0, 0); }
+      50% { transform: scale(1.2) translate(-1.5%, 1%); }
+    }
+    .music-ambient-tint {
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(ellipse 90% 80% at 12% 20%, rgb(var(--glow) / .55), transparent 58%),
+        radial-gradient(ellipse 70% 70% at 88% 78%, rgb(var(--glow) / .32), transparent 52%);
+      mix-blend-mode: screen;
+      opacity: .7;
+      transition: opacity .4s ease;
+    }
+    .blob.is-playing .music-ambient-tint {
+      animation: ambientPulse 2.4s ease-in-out infinite;
+    }
+    @keyframes ambientPulse {
+      0%, 100% { opacity: .5; }
+      50% { opacity: .92; }
+    }
+    .music-ambient-veil {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(
+        180deg,
+        rgba(0,0,0,.06) 0%,
+        rgba(0,0,0,.22) 38%,
+        rgba(0,0,0,.78) 100%
+      );
+    }
+    /* Páginas expandidas: conteúdo em cima, pager no rodapé (sem sobrepor a barra). */
+    .blob.expanded-music,
+    .blob.power,
+    .blob.expanded-timer,
+    .blob.expanded-status {
+      display: flex;
+      flex-direction: column;
+    }
+    .blob-shell {
+      position: relative;
+      flex: 1 1 auto;
+      min-height: 0;
+      width: 100%;
+    }
+    .blob-pager-footer {
+      flex: 0 0 26px;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      z-index: 7;
+      pointer-events: none;
+    }
+    .blob-pager-footer .pager {
+      position: static;
+      bottom: auto;
+      left: auto;
+      right: auto;
+      pointer-events: auto;
+    }
+    .blob.expanded-music .blob-pager-footer,
+    .blob.power .blob-pager-footer,
+    .blob.expanded-timer .blob-pager-footer,
+    .blob.expanded-status .blob-pager-footer {
+      display: flex;
+    }
+    .blob.expanded-music .blob-pager-footer {
+      flex: 0 0 32px;
+    }
     .blob.power           { width: 300px; height: 128px; border-radius: 28px; }
-    .blob.expanded-timer  { width: 360px; height: 148px; border-radius: 28px; }
+    .blob.expanded-timer  { width: 392px; height: 178px; border-radius: 28px; }
     .blob.expanded-status { width: 280px; height: 128px; border-radius: 28px; }
     .blob.alert-banner { width: 344px; height: 90px; border-radius: 42px; }
     .blob.alert-inline { width: 200px; height: 37px; border-radius: 19px; }
@@ -250,6 +385,7 @@
       100% { transform: scale(1); }
     }
     .art.pop { animation: artPop .62s var(--ease); }
+    #ilha.track-leafing .art.pop { animation: none; }
 
     /* Equalizador com as cores da capa */
     .eq { display: flex; align-items: flex-end; gap: 2.5px; height: 14px; margin-left: auto; }
@@ -330,17 +466,217 @@
     .ring-lg { width: 52px; height: 52px; }
     .ring-lg circle { stroke-width: 3.4; }
 
-    /* ── Música expandida ─────────────────────────── */
+    /* ── Música expandida (fundo vivo + dock de controles) ── */
     .face[data-face="expanded-music"] {
-      padding: 16px 18px 22px;
+      padding: 12px 18px 4px;
       display: flex;
       flex-direction: column;
-      gap: 12px;
+      z-index: 2;
+      overflow: visible;
     }
-    .music-top { display: flex; gap: 12px; align-items: center; min-width: 0; }
+    .music-stage {
+      position: relative;
+      z-index: 2;
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      min-height: 0;
+      gap: 6px;
+    }
+    .music-stage .transport-row,
+    .music-stage .scrub-dock {
+      flex-shrink: 0;
+    }
+    .music-hero-glance {
+      position: absolute;
+      right: -18px;
+      top: -6px;
+      width: 132px;
+      height: 132px;
+      border-radius: 20px;
+      background: center/cover no-repeat;
+      opacity: 0;
+      transform: rotate(7deg);
+      pointer-events: none;
+      z-index: 0;
+      box-shadow: 0 16px 40px rgba(0,0,0,.45);
+      -webkit-mask-image: linear-gradient(115deg, transparent 8%, #000 52%);
+              mask-image: linear-gradient(115deg, transparent 8%, #000 52%);
+      transition: opacity .55s ease, background-image .65s ease;
+    }
+    .blob.has-music-art.expanded-music .music-hero-glance {
+      opacity: .62;
+    }
+    .music-now {
+      position: relative;
+      z-index: 1;
+      font-size: 10px;
+      font-weight: 650;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,.52);
+      text-shadow: 0 1px 10px rgba(0,0,0,.55);
+    }
+    .music-meta-wrap {
+      position: relative;
+      z-index: 1;
+      perspective: 720px;
+      perspective-origin: 28% center;
+      min-height: 56px;
+      overflow: hidden;
+      border-radius: 14px;
+    }
+    .music-meta-wrap.leaf-active::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      z-index: 4;
+      pointer-events: none;
+      background: linear-gradient(
+        100deg,
+        rgba(0,0,0,.62) 0%,
+        rgba(0,0,0,.22) 42%,
+        transparent 68%
+      );
+      opacity: 0;
+      animation: leafShade .72s var(--ease) both;
+    }
+    .music-meta-wrap.leaf-active.leaf-back::before {
+      background: linear-gradient(
+        260deg,
+        rgba(0,0,0,.62) 0%,
+        rgba(0,0,0,.22) 42%,
+        transparent 68%
+      );
+    }
+    @keyframes leafShade {
+      0%, 100% { opacity: 0; }
+      28%, 58% { opacity: 1; }
+    }
+    .music-meta {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      gap: 14px;
+      align-items: center;
+      min-width: 0;
+      padding-right: 64px;
+      transform-style: preserve-3d;
+      backface-visibility: hidden;
+      transition:
+        transform .62s var(--ease),
+        opacity .48s ease,
+        filter .48s ease,
+        box-shadow .5s ease;
+      will-change: transform, opacity;
+    }
+    .music-meta.leaf-out.leaf-fwd {
+      transform: rotateY(-92deg) translateX(-10px) scale(.9);
+      opacity: 0.06;
+      filter: blur(3px) brightness(.72);
+      transform-origin: left center;
+      box-shadow: -16px 6px 32px rgba(0,0,0,.5);
+    }
+    .music-meta.leaf-out.leaf-back {
+      transform: rotateY(92deg) translateX(10px) scale(.9);
+      opacity: 0.06;
+      filter: blur(3px) brightness(.72);
+      transform-origin: right center;
+      box-shadow: 16px 6px 32px rgba(0,0,0,.5);
+    }
+    .music-meta.leaf-in.leaf-fwd {
+      transform: rotateY(86deg) translateX(14px) scale(.9);
+      opacity: 0;
+      filter: blur(4px);
+      transform-origin: right center;
+      box-shadow: 12px 4px 24px rgba(0,0,0,.35);
+    }
+    .music-meta.leaf-in.leaf-fwd.leaf-run {
+      transform: rotateY(0deg) translateX(0) scale(1);
+      opacity: 1;
+      filter: blur(0) brightness(1);
+      box-shadow: none;
+    }
+    .music-meta.leaf-in.leaf-back {
+      transform: rotateY(-86deg) translateX(-14px) scale(.9);
+      opacity: 0;
+      filter: blur(4px);
+      transform-origin: left center;
+      box-shadow: -12px 4px 24px rgba(0,0,0,.35);
+    }
+    .music-meta.leaf-in.leaf-back.leaf-run {
+      transform: rotateY(0deg) translateX(0) scale(1);
+      opacity: 1;
+      filter: blur(0) brightness(1);
+      box-shadow: none;
+    }
+    .music-hero-glance.leaf-glance {
+      animation: glanceLeaf .72s var(--ease) both;
+    }
+    @keyframes glanceLeaf {
+      0%   { opacity: .62; transform: rotate(7deg) scale(1); }
+      38%  { opacity: .04; transform: rotate(0deg) scale(.86) translateX(-18%); }
+      100% { opacity: .62; transform: rotate(7deg) scale(1); }
+    }
+    #ilha.track-leafing .music-ambient-bg,
+    #ilha.track-leafing .music-ambient-canvas {
+      transition-duration: .75s;
+      filter: blur(46px) saturate(1.65) brightness(.72);
+    }
+    #ilha.track-leafing.is-playing .music-ambient-bg {
+      animation: ambientDrift 14s ease-in-out infinite, leafAmbient .72s var(--ease);
+    }
+    @keyframes leafAmbient {
+      0%, 100% { transform: scale(1.14); }
+      45% { transform: scale(1.22) translateX(-2%); }
+    }
     .music-copy { min-width: 0; flex: 1; }
-    .hairline { height: 1px; background: rgba(255,255,255,.07); }
+    .art-xl {
+      width: 56px;
+      height: 56px;
+      border-radius: 14px;
+      box-shadow:
+        inset 0 0 0 .5px rgba(255,255,255,.2),
+        0 10px 28px -8px rgba(0,0,0,.65);
+    }
+    .transport-row {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 18px;
+      margin-top: 2px;
+    }
+    .transport-row .ctrl.play {
+      width: 44px;
+      height: 44px;
+    }
+    .transport-row .ctrl.play svg { width: 16px; height: 16px; }
+    .scrub-dock {
+      position: relative;
+      z-index: 1;
+      margin-top: auto;
+      padding-top: 4px;
+    }
+    .blob.expanded-music .scrub-dock {
+      padding-bottom: 12px;
+      margin-bottom: 2px;
+    }
+    .blob.expanded-music .bar {
+      --bar-hit: 22px;
+      overflow: visible;
+    }
 
+    .face[data-face="expanded-music"] .title {
+      font-size: 16px;
+      text-shadow: 0 1px 12px rgba(0,0,0,.45);
+    }
+    .face[data-face="expanded-music"] .artist {
+      font-size: 13px;
+      color: rgba(255,255,255,.62);
+      text-shadow: 0 1px 8px rgba(0,0,0,.4);
+    }
     .title {
       font-size: 14px;
       font-weight: 600;
@@ -371,29 +707,86 @@
     .scrub { display: flex; flex-direction: column; gap: 8px; }
     .bar {
       position: relative;
+      --bar-hit: 18px;
+      height: var(--bar-hit);
+      cursor: pointer;
+      touch-action: none;
+    }
+    .bar-rail {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 50%;
       height: 4px;
+      transform: translateY(-50%);
       border-radius: 99px;
       background: rgba(255,255,255,.1);
+      overflow: hidden;
+    }
+    .bar.seeking {
+      cursor: grabbing;
+    }
+    .bar.seeking .bar-fill,
+    .bar.is-playing .bar-fill {
+      transition: none;
     }
     .bar-fill {
       position: relative;
       height: 100%;
       width: 0;
       border-radius: 99px;
-      background: linear-gradient(90deg, #a78bfa, #e879f9);
-      transition: width .95s linear;
+      background: linear-gradient(90deg, rgb(var(--glow) / .75), rgba(255,255,255,.95));
+      box-shadow: 0 0 12px rgb(var(--glow) / .65);
+      transition: width .28s linear;
     }
-    .bar-fill::after {
-      content: '';
+    .bar-thumb {
       position: absolute;
-      right: -4px;
       top: 50%;
-      width: 8px;
-      height: 8px;
+      left: 0;
+      width: 10px;
+      height: 10px;
       border-radius: 50%;
       background: #fff;
-      box-shadow: 0 0 8px #fff;
-      transform: translateY(-50%);
+      transform: translate(-50%, -50%) scale(.82);
+      box-shadow:
+        0 0 0 0 rgb(var(--glow) / .45),
+        0 0 10px rgb(var(--glow) / .75);
+      transition:
+        left .28s linear,
+        transform .42s var(--spring),
+        box-shadow .35s ease;
+      pointer-events: none;
+      will-change: left, transform;
+    }
+    .bar.is-playing:not(.seeking) .bar-thumb {
+      animation: thumbBreath 2.4s ease-in-out infinite;
+      transition: transform .42s var(--spring), box-shadow .35s ease;
+    }
+    @keyframes thumbBreath {
+      0%, 100% {
+        transform: translate(-50%, -50%) scale(.88);
+        box-shadow:
+          0 0 0 0 rgb(var(--glow) / .35),
+          0 0 10px rgb(var(--glow) / .65);
+      }
+      50% {
+        transform: translate(-50%, -50%) scale(1);
+        box-shadow:
+          0 0 0 4px rgb(var(--glow) / .22),
+          0 0 14px rgba(255,255,255,.9);
+      }
+    }
+    .bar.seeking .bar-thumb {
+      animation: none;
+      transform: translate(-50%, -50%) scale(1.18);
+      box-shadow:
+        0 0 0 5px rgb(var(--glow) / .3),
+        0 0 18px rgba(255,255,255,1);
+      transition: left 0s linear, transform .22s var(--spring), box-shadow .22s ease;
+    }
+    .bar:not(.is-playing) .bar-thumb {
+      transform: translate(-50%, -50%) scale(.78);
+      opacity: .88;
     }
     .scrub-times {
       display: flex;
@@ -419,8 +812,9 @@
       color: rgba(255,255,255,.65);
       transition: background .2s ease, color .2s ease, transform .3s var(--spring);
     }
-    button.ctrl svg { width: 16px; height: 16px; display: block; }
-    button.ctrl svg[hidden] { display: none; }
+    button.ctrl svg { width: 16px; height: 16px; }
+    #btn-play .ico { display: none; }
+    #btn-play .ico.on { display: block; }
     button.ctrl:hover { background: rgba(255,255,255,.1); color: #fff; }
     button.ctrl:active { transform: scale(.92); }
     button.ctrl.play {
@@ -434,11 +828,13 @@
 
     /* ── Timer expandido ──────────────────────────── */
     .face[data-face="expanded-timer"] {
-      padding: 16px 18px 26px;
+      padding: 12px 16px 10px;
       display: flex;
       flex-direction: column;
+      gap: 8px;
+      box-sizing: border-box;
     }
-    .timer-head { display: flex; align-items: center; gap: 14px; }
+    .timer-head { display: flex; align-items: center; gap: 12px; min-width: 0; }
     .timer-copy { flex: 1; min-width: 0; }
     .kicker {
       font-size: 11px;
@@ -461,6 +857,24 @@
       font-variant-numeric: tabular-nums;
     }
     .actions { margin-top: auto; display: flex; gap: 6px; align-items: center; }
+    .timer-actions {
+      margin-top: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      width: 100%;
+      min-width: 0;
+    }
+    .timer-presets {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 6px;
+    }
+    .timer-controls {
+      display: grid;
+      grid-template-columns: 1.35fr 1fr;
+      gap: 8px;
+    }
     .blob.expanded-timer {
       box-shadow:
         0 24px 80px rgba(0,0,0,.45),
@@ -480,6 +894,7 @@
     }
     .pill:hover { background: rgba(255,255,255,.22); }
     .pill:active { transform: scale(.95); }
+    .pill:disabled { opacity: .38; cursor: default; pointer-events: none; }
     .pill.danger { background: rgba(255,69,58,.18); color: #ff6b61; }
     .pill.danger:hover { background: rgba(255,69,58,.3); }
 
@@ -562,7 +977,12 @@
     .battery.low .batt-level { background: #ff453a; box-shadow: 0 0 8px rgba(255,69,58,.8); }
     .battery.charging { color: #30d158; }
     .battery.low { color: #ff6b61; }
-    #battery-bolt { filter: drop-shadow(0 0 5px rgba(48,209,88,.9)); }
+    #battery-bolt {
+      display: none;
+      flex: none;
+      filter: drop-shadow(0 0 5px rgba(48,209,88,.9));
+    }
+    #battery-bolt.on { display: block; }
 
     .chips { display: flex; gap: 6px; }
     .chip {
@@ -583,6 +1003,64 @@
       transform: translateY(-1px);
     }
     .chip:active { transform: scale(.93); }
+
+    /* Timer Foco: sobrescreve .chip/.pill globais (evita quebra “5” / “min”). */
+    .blob.expanded-timer .chip-txt {
+      display: block;
+      white-space: nowrap;
+      line-height: 1;
+    }
+    .blob.expanded-timer .timer-presets .chip,
+    .blob.expanded-timer .timer-controls .pill {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      white-space: nowrap;
+      line-height: 1;
+      height: 32px;
+      min-height: 32px;
+      padding: 0 10px;
+      font-size: 11px;
+      font-weight: 600;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .blob.expanded-timer .timer-controls .pill { font-size: 11px; }
+    .blob.expanded-timer .ring-lg {
+      width: 46px;
+      height: 46px;
+      flex: none;
+    }
+    .blob.expanded-timer .pill-timer-main {
+      background: rgba(255,255,255,.2);
+      box-shadow:
+        inset 0 0 0 .5px rgba(255,255,255,.14),
+        0 0 20px rgba(255,159,10,.12);
+      font-size: 12px;
+      font-weight: 650;
+      letter-spacing: -0.01em;
+    }
+    .blob.expanded-timer .pill-timer-main:hover {
+      background: rgba(255,255,255,.28);
+    }
+    .blob.expanded-timer .pill-timer-main.is-idle {
+      background: rgba(48,209,88,.2);
+      color: #b8f5c8;
+      box-shadow:
+        inset 0 0 0 .5px rgba(48,209,88,.35),
+        0 0 18px rgba(48,209,88,.15);
+    }
+    .blob.expanded-timer .pill-timer-main.is-idle:hover {
+      background: rgba(48,209,88,.32);
+    }
+    .blob.expanded-timer .pill-timer-reset {
+      background: rgba(139,92,246,.16);
+      color: #ddd6fe;
+      box-shadow: inset 0 0 0 .5px rgba(167,139,250,.28);
+    }
+    .blob.expanded-timer .pill-timer-reset:hover {
+      background: rgba(139,92,246,.28);
+    }
 
     .power-hero {
       display: flex;
@@ -650,6 +1128,13 @@
   <div id="borda"></div>
   <div id="cluster" class="away">
     <div id="ilha" class="blob rest">
+      <div class="music-ambient" id="music-ambient" aria-hidden="true">
+        <div class="music-ambient-bg" id="music-ambient-bg"></div>
+        <div class="music-ambient-canvas" id="music-ambient-canvas"></div>
+        <div class="music-ambient-tint"></div>
+        <div class="music-ambient-veil"></div>
+      </div>
+      <div class="blob-shell">
       <div class="face on" data-face="rest">
         <span class="rest-time" id="clock">--:--</span>
       </div>
@@ -666,7 +1151,7 @@
             <svg viewBox="0 0 24 24" width="13" height="13"><path fill="currentColor" d="M13 2 4.5 13.2h6.2L9.8 22 19.5 9.6h-6.2L13 2z"/></svg>
           </span>
         </div>
-      </div>
+    </div>
 
       <div class="face" data-face="power">
         <div class="kicker" id="power-kicker">Energia</div>
@@ -677,7 +1162,7 @@
           </div>
           <div class="battery" id="battery-row">
             <div class="batt-shell"><div class="batt-level" id="batt-level"></div></div>
-            <svg id="battery-bolt" viewBox="0 0 24 24" width="12" height="12" hidden><path fill="currentColor" d="M13 2 4.5 13.2h6.2L9.8 22 19.5 9.6h-6.2L13 2z"/></svg>
+            <svg id="battery-bolt" viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><path fill="currentColor" d="M13 2 4.5 13.2h6.2L9.8 22 19.5 9.6h-6.2L13 2z"/></svg>
             <span id="battery-label"></span>
           </div>
           <svg class="ring ring-lg" viewBox="0 0 44 44">
@@ -713,36 +1198,52 @@
       </div>
 
       <div class="face" data-face="expanded-music">
-        <div class="music-top">
-          <div class="art art-lg" data-art>
-            <svg class="fallback" viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M9 17.5a2.5 2.5 0 1 1-2-2.45V6.8l10-2v9.25a2.5 2.5 0 1 1-2-2.45V7.2l-6 1.2v9.1z"/></svg>
+        <div class="music-hero-glance" id="music-hero-glance" aria-hidden="true"></div>
+        <div class="music-stage">
+          <div class="music-now">Tocando agora</div>
+          <div class="music-meta-wrap">
+          <div class="music-meta" id="music-meta">
+            <div class="art art-xl" data-art>
+              <svg class="fallback" viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M9 17.5a2.5 2.5 0 1 1-2-2.45V6.8l10-2v9.25a2.5 2.5 0 1 1-2-2.45V7.2l-6 1.2v9.1z"/></svg>
+            </div>
+            <div class="music-copy">
+              <div class="title" id="title-box"><span id="song-title">Música</span></div>
+              <div class="artist" id="song-artist"></div>
+            </div>
           </div>
-          <div class="music-copy">
-            <div class="title" id="title-box"><span id="song-title">Música</span></div>
-            <div class="artist" id="song-artist"></div>
           </div>
-          <div class="transport">
+          <div class="transport transport-row">
             <button class="ctrl" id="btn-prev" type="button" aria-label="Anterior">
               <svg viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M14.5 6.5 8.5 12l6 5.5"/></svg>
             </button>
-            <button class="ctrl play" id="btn-play" type="button" aria-label="Reproduzir ou pausar">
-              <svg id="icon-pause" viewBox="0 0 24 24"><path fill="currentColor" d="M6.2 4.8h3.6v14.4H6.2zm8 0h3.6v14.4h-3.6z"/></svg>
-              <svg id="icon-play" viewBox="0 0 24 24" hidden><path fill="currentColor" d="M8.2 5.4v13.2c0 .7.8 1.1 1.4.7l9.4-6.6a.9.9 0 0 0 0-1.4L9.6 4.7c-.6-.4-1.4 0-1.4.7z"/></svg>
+            <button class="ctrl play" id="btn-play" type="button" aria-label="Pausar">
+              <svg class="ico ico-pause on" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M6.2 4.8h3.6v14.4H6.2zm8 0h3.6v14.4h-3.6z"/></svg>
+              <svg class="ico ico-play" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M8.2 5.4v13.2c0 .7.8 1.1 1.4.7l9.4-6.6a.9.9 0 0 0 0-1.4L9.6 4.7c-.6-.4-1.4 0-1.4.7z"/></svg>
             </button>
             <button class="ctrl" id="btn-next" type="button" aria-label="Próxima">
               <svg viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="m9.5 6.5 6 5.5-6 5.5"/></svg>
             </button>
           </div>
-        </div>
-        <div class="hairline"></div>
-        <div class="scrub">
-          <div class="scrub-times">
-            <span id="time-now">0:00</span>
-            <span id="time-left">0:00</span>
-          </div>
-          <div class="bar"><div class="bar-fill" id="progress"></div></div>
+          <div class="scrub scrub-dock">
+            <div class="scrub-times">
+              <span id="time-now">0:00</span>
+              <span id="time-left">0:00</span>
+            </div>
+            <div
+              class="bar"
+              id="progress-bar"
+              role="slider"
+              aria-label="Posição na faixa"
+              aria-valuemin="0"
+              aria-valuemax="100"
+              aria-valuenow="0"
+            >
+              <div class="bar-rail"><div class="bar-fill" id="progress"></div></div>
+              <div class="bar-thumb" id="progress-thumb" aria-hidden="true"></div>
+            </div>
         </div>
       </div>
+    </div>
 
       <div class="face" data-face="expanded-timer">
         <div class="timer-head">
@@ -756,14 +1257,18 @@
             <circle class="fill" id="ring-lg" cx="22" cy="22" r="19"/>
           </svg>
         </div>
-        <div class="actions">
-          <button class="chip" type="button" data-min="5">5 min</button>
-          <button class="chip" type="button" data-min="15">15 min</button>
-          <button class="chip" type="button" data-min="25">25 min</button>
-          <button class="pill" id="btn-timer-toggle" type="button">Pausar</button>
-          <button class="pill danger" id="btn-timer-stop" type="button">Parar</button>
-        </div>
+        <div class="timer-actions">
+          <div class="timer-presets">
+            <button class="chip" type="button" data-min="5"><span class="chip-txt">5&nbsp;min</span></button>
+            <button class="chip" type="button" data-min="15"><span class="chip-txt">15&nbsp;min</span></button>
+            <button class="chip" type="button" data-min="25"><span class="chip-txt">25&nbsp;min</span></button>
+          </div>
+          <div class="timer-controls">
+            <button class="pill pill-timer-main" id="btn-timer-stop" type="button" disabled>Iniciar</button>
+            <button class="pill pill-timer-reset" id="btn-timer-reset" type="button" disabled>Reiniciar</button>
+          </div>
       </div>
+    </div>
 
       <div class="face" data-face="expanded-status">
         <div class="kicker">Agora</div>
@@ -783,11 +1288,14 @@
           <div class="alert-sub" id="alert-sub"></div>
         </div>
       </div>
-      <div class="pager" id="pager">
-        <button type="button" data-i="0" aria-label="Música"></button>
-        <button type="button" data-i="1" aria-label="Bateria"></button>
-        <button type="button" data-i="2" aria-label="Timer"></button>
-        <button type="button" data-i="3" aria-label="Relógio"></button>
+      </div>
+      <div class="blob-pager-footer">
+        <div class="pager" id="pager">
+          <button type="button" data-i="0" aria-label="Música"></button>
+          <button type="button" data-i="1" aria-label="Bateria"></button>
+          <button type="button" data-i="2" aria-label="Timer"></button>
+          <button type="button" data-i="3" aria-label="Relógio"></button>
+        </div>
       </div>
     </div>
 
@@ -817,7 +1325,14 @@
     let visitaTimer = null
     let ponteiroEmCima = false
     let pagina = 0
+    const CHAVE_PAGINA = 'dynamic-island-pagina'
     let gestoX = null
+    let playOtimista = null
+    let syncPlayAte = 0
+    let seekOtimistaAte = 0
+    let arrastandoSeek = false
+    let folhaSentido = 1
+    let folhaEmCurso = false
     const PAGINAS = ['expanded-music', 'power', 'expanded-timer', 'expanded-status']
 
     const VOLTA_ANEL_SM = 2 * Math.PI * 9.5
@@ -890,6 +1405,25 @@
     function paintAlert() {
       document.getElementById('alert-title').textContent = alert.title || ''
       document.getElementById('alert-sub').textContent = alert.subtitle || ''
+    }
+
+    function salvarPagina() {
+      try {
+        localStorage.setItem(CHAVE_PAGINA, String(pagina))
+      } catch (_) {}
+    }
+
+    function carregarPagina() {
+      try {
+        const salva = Number(localStorage.getItem(CHAVE_PAGINA))
+        if (salva >= 0 && salva < PAGINAS.length) pagina = salva
+      } catch (_) {}
+    }
+
+    function definirPagina(nova) {
+      pagina = Math.max(0, Math.min(PAGINAS.length - 1, Number(nova) || 0))
+      salvarPagina()
+      renderLayout()
     }
 
     function mostrarIlha() {
@@ -965,9 +1499,25 @@
       document.getElementById('timer-compact').textContent = texto
       document.getElementById('timer-min').textContent = texto
       document.getElementById('timer-display').textContent = texto
-      const pausado = timer.active && !timer.running
-      document.getElementById('timer-state').textContent = pausado ? 'Pausado' : 'Em andamento'
-      document.getElementById('btn-timer-toggle').textContent = pausado ? 'Retomar' : 'Pausar'
+      const parado = timer.active && !timer.running
+      document.getElementById('timer-state').textContent = !timer.active
+        ? 'Escolha um tempo'
+        : (parado ? 'Parado' : 'Contando')
+      const btnPrincipal = document.getElementById('btn-timer-stop')
+      if (!timer.active) {
+        btnPrincipal.textContent = 'Iniciar'
+        btnPrincipal.disabled = true
+        btnPrincipal.classList.add('is-idle')
+      } else if (timer.running) {
+        btnPrincipal.textContent = 'Parar'
+        btnPrincipal.disabled = false
+        btnPrincipal.classList.remove('is-idle')
+      } else {
+        btnPrincipal.textContent = 'Iniciar'
+        btnPrincipal.disabled = false
+        btnPrincipal.classList.add('is-idle')
+      }
+      document.getElementById('btn-timer-reset').disabled = !timer.active || !timer.total
       // Os anéis esvaziam conforme o tempo passa.
       const fracao = timer.total ? left / timer.total : 0
       pintarAnel('ring-sm', VOLTA_ANEL_SM, fracao)
@@ -986,6 +1536,8 @@
         subtitle: 'Tempo esgotado',
         sticky: true,
       })
+      paintTimer()
+      renderLayout()
     }
 
     function startIslandTimer(min) {
@@ -1003,7 +1555,7 @@
     }
     window.startIslandTimer = startIslandTimer
 
-    function toggleTimerRun() {
+    function alternarTimerPrincipal() {
       if (!timer.active) return
       if (timer.running) {
         timer.remainOnPause = timerLeft()
@@ -1011,20 +1563,38 @@
       } else {
         timer.end = Date.now() + timer.remainOnPause * 1000
         timer.running = true
+        timer.fired = false
       }
       paintTimer()
     }
 
-    function stopTimer() {
-      timer.active = false
-      timer.running = false
+    function resetTimer() {
+      if (!timer.active || !timer.total) return
+      timer.running = true
       timer.fired = false
-      renderLayout()
+      timer.remainOnPause = timer.total
+      timer.end = Date.now() + timer.total * 1000
+      if (alert && alert.kind === 'timer') dismissAlert()
+      paintTimer()
     }
 
     // A cor viva da capa vira o halo da cápsula e o brilho dos detalhes.
+    function atualizarAmbienteMusica() {
+      island.classList.toggle('has-music-art', !!(music.active && music.art))
+      island.classList.toggle('is-music-live', !!music.active)
+      island.classList.toggle('is-playing', !!(music.active && music.isPlaying))
+      const img = music.art ? 'url("' + music.art + '")' : ''
+      const bg = document.getElementById('music-ambient-bg')
+      const canvas = document.getElementById('music-ambient-canvas')
+      const glance = document.getElementById('music-hero-glance')
+      if (bg) bg.style.backgroundImage = img
+      if (canvas) canvas.style.backgroundImage = img
+      if (glance) glance.style.backgroundImage = img
+    }
+
     function extrairCor(url) {
       const img = new Image()
+      if (url && !String(url).startsWith('data:')) img.crossOrigin = 'anonymous'
       img.onload = () => {
         try {
           const lona = document.createElement('canvas')
@@ -1045,9 +1615,14 @@
           r = Math.round(r / n); g = Math.round(g / n); b = Math.round(b / n)
           haloDaCapa = r + ' ' + g + ' ' + b
           ajustarHalo(resolveMode(), alert ? alert.kind : '')
+          atualizarAmbienteMusica()
         } catch (erro) {
           haloDaCapa = HALO.neutro
         }
+      }
+      img.onerror = () => {
+        haloDaCapa = HALO.neutro
+        atualizarAmbienteMusica()
       }
       img.src = url
     }
@@ -1065,7 +1640,13 @@
         void el.offsetWidth
         el.classList.add('pop')
       })
+      music.art = url || ''
+      atualizarAmbienteMusica()
       if (url) extrairCor(url)
+      else {
+        haloDaCapa = HALO.neutro
+        ajustarHalo(resolveMode(), alert ? alert.kind : '')
+      }
     }
 
     // Título longo precisa saber quanto sobrou para fora antes de rolar.
@@ -1087,23 +1668,137 @@
     }
     new ResizeObserver(medirTitulo).observe(document.getElementById('title-box'))
 
+    function estadoPlayDoServidor(data) {
+      return !!(data && data.playing && data.isPlaying === true)
+    }
+
+    function aplicarEstadoPlay(doServidor) {
+      const agora = Date.now()
+      if (playOtimista !== null && agora < syncPlayAte) {
+        music.isPlaying = playOtimista
+        if (doServidor === playOtimista) {
+          playOtimista = null
+          syncPlayAte = 0
+        }
+        return
+      }
+      playOtimista = null
+      syncPlayAte = 0
+      music.isPlaying = doServidor
+    }
+
+    function musicaExpandidaVisivel() {
+      return music.active && !cluster.classList.contains('away') && pagina === 0
+    }
+
+    function animarFolhaMusica(sentido, aoConcluir) {
+      const meta = document.getElementById('music-meta')
+      const wrap = document.querySelector('.music-meta-wrap')
+      const glance = document.getElementById('music-hero-glance')
+      if (!meta || !musicaExpandidaVisivel() || folhaEmCurso) {
+        aoConcluir()
+        return
+      }
+      folhaEmCurso = true
+      island.classList.add('track-leafing')
+      const fwd = sentido >= 0
+      const dir = fwd ? 'leaf-fwd' : 'leaf-back'
+      wrap?.classList.remove('leaf-fwd', 'leaf-back', 'leaf-active')
+      wrap?.classList.add('leaf-active', dir)
+      meta.classList.remove('leaf-in', 'leaf-out', 'leaf-fwd', 'leaf-back', 'leaf-run')
+      meta.classList.add('leaf-out', dir)
+      if (glance) glance.classList.add('leaf-glance')
+      void meta.offsetWidth
+
+      let meioPronto = false
+      let folhaFechada = false
+      const finalizar = () => {
+        if (folhaFechada) return
+        folhaFechada = true
+        meta.classList.remove('leaf-in', 'leaf-fwd', 'leaf-back', 'leaf-run', 'leaf-out')
+        wrap?.classList.remove('leaf-active', 'leaf-fwd', 'leaf-back')
+        if (glance) glance.classList.remove('leaf-glance')
+        island.classList.remove('track-leafing')
+        folhaEmCurso = false
+      }
+      const entrar = () => {
+        if (meioPronto) return
+        meioPronto = true
+        clearTimeout(fallbackSaida)
+        aoConcluir()
+        meta.classList.remove('leaf-out')
+        meta.classList.add('leaf-in', dir)
+        void meta.offsetWidth
+        requestAnimationFrame(() => meta.classList.add('leaf-run'))
+        const fallbackEntrada = setTimeout(finalizar, 680)
+        meta.addEventListener('transitionend', function onIn(ev) {
+          if (ev.target !== meta || ev.propertyName !== 'transform') return
+          meta.removeEventListener('transitionend', onIn)
+          clearTimeout(fallbackEntrada)
+          finalizar()
+        })
+      }
+      const fallbackSaida = setTimeout(entrar, 640)
+      meta.addEventListener('transitionend', function onOut(ev) {
+        if (ev.target !== meta || ev.propertyName !== 'transform') return
+        meta.removeEventListener('transitionend', onOut)
+        clearTimeout(fallbackSaida)
+        entrar()
+      })
+    }
+
     function paintMusic() {
       document.getElementById('song-title').textContent = music.title || 'Música'
       document.getElementById('song-artist').textContent = music.artist || ''
       document.getElementById('eq').classList.toggle('paused', !music.isPlaying)
-      document.getElementById('progress').classList.toggle('still', !music.isPlaying)
-      document.getElementById('icon-pause').hidden = !music.isPlaying
-      document.getElementById('icon-play').hidden = music.isPlaying
+      document.getElementById('progress-bar').classList.toggle('is-playing', music.isPlaying)
+      const btnPlay = document.getElementById('btn-play')
+      btnPlay.querySelector('.ico-pause').classList.toggle('on', music.isPlaying)
+      btnPlay.querySelector('.ico-play').classList.toggle('on', !music.isPlaying)
+      btnPlay.setAttribute('aria-label', music.isPlaying ? 'Pausar' : 'Reproduzir')
+      atualizarAmbienteMusica()
       medirTitulo()
     }
 
-    function paintProgress() {
+    function progressoAtualMs() {
+      if (arrastandoSeek || Date.now() < seekOtimistaAte) return music.progressMs
       const decorrido = music.isPlaying ? Date.now() - music.stamp : 0
-      const atual = Math.min(music.progressMs + decorrido, music.durationMs || music.progressMs + decorrido)
+      const teto = music.durationMs || music.progressMs + decorrido
+      return Math.min(music.progressMs + decorrido, teto)
+    }
+
+    function paintProgress() {
+      const atual = progressoAtualMs()
       const pct = music.durationMs ? (atual / music.durationMs) * 100 : 0
-      document.getElementById('progress').style.width = Math.max(0, Math.min(100, pct)) + '%'
+      const pctClamped = Math.max(0, Math.min(100, pct))
+      document.getElementById('progress').style.width = pctClamped + '%'
+      const thumb = document.getElementById('progress-thumb')
+      if (thumb) thumb.style.left = pctClamped + '%'
       document.getElementById('time-now').textContent = formatMs(atual)
       document.getElementById('time-left').textContent = music.durationMs ? formatMs(music.durationMs) : '–:–'
+      const barra = document.getElementById('progress-bar')
+      if (barra) barra.setAttribute('aria-valuenow', String(Math.round(pct)))
+    }
+
+    function msNaBarra(clientX) {
+      const barra = document.getElementById('progress-bar')
+      if (!barra || !music.durationMs) return 0
+      const r = barra.getBoundingClientRect()
+      const ratio = Math.max(0, Math.min(1, (clientX - r.left) / r.width))
+      return Math.round(ratio * music.durationMs)
+    }
+
+    function aplicarSeekVisual(ms) {
+      music.progressMs = Math.max(0, Math.min(music.durationMs || ms, ms))
+      music.stamp = Date.now()
+      paintProgress()
+    }
+
+    function confirmarSeek(ms) {
+      if (!music.active || !music.durationMs) return
+      seekOtimistaAte = Date.now() + 2600
+      aplicarSeekVisual(ms)
+      window.island?.mediaSeek(ms)
     }
 
     function paintBattery() {
@@ -1112,8 +1807,8 @@
       const fraca = power.available && !power.charging && power.percent <= 20
       row.classList.toggle('charging', !!power.charging)
       row.classList.toggle('low', fraca)
-      const aceso = !!power.charging
-      document.getElementById('battery-bolt').hidden = !aceso
+      const aceso = !!(power.available && power.charging)
+      document.getElementById('battery-bolt').classList.toggle('on', aceso)
       document.getElementById('music-bolt').hidden = !aceso
       const pct = power.available && power.percent != null ? power.percent + '%' : ''
       document.getElementById('battery-label').textContent = pct
@@ -1133,8 +1828,42 @@
       document.getElementById('batt-level').style.width = nivel + 'px'
     }
 
+    const barraProgresso = document.getElementById('progress-bar')
+    function finalizarArrasteSeek(event) {
+      if (!arrastandoSeek) return
+      arrastandoSeek = false
+      barraProgresso.classList.remove('seeking')
+      if (barraProgresso.hasPointerCapture(event.pointerId)) {
+        barraProgresso.releasePointerCapture(event.pointerId)
+      }
+      window.island?.segurar(false)
+      confirmarSeek(msNaBarra(event.clientX))
+    }
+    barraProgresso.addEventListener('pointerdown', (event) => {
+      event.stopPropagation()
+      if (!music.active || !music.durationMs) return
+      arrastandoSeek = true
+      barraProgresso.classList.add('seeking')
+      barraProgresso.setPointerCapture(event.pointerId)
+      window.island?.segurar(true)
+      aplicarSeekVisual(msNaBarra(event.clientX))
+    })
+    barraProgresso.addEventListener('pointermove', (event) => {
+      if (!arrastandoSeek) return
+      event.stopPropagation()
+      aplicarSeekVisual(msNaBarra(event.clientX))
+    })
+    barraProgresso.addEventListener('pointerup', (event) => {
+      event.stopPropagation()
+      finalizarArrasteSeek(event)
+    })
+    barraProgresso.addEventListener('pointercancel', (event) => {
+      event.stopPropagation()
+      finalizarArrasteSeek(event)
+    })
+
     island.addEventListener('pointerdown', (event) => {
-      if (event.target.closest('button')) return
+      if (event.target.closest('button, #progress-bar')) return
       gestoX = event.clientX
       window.island?.segurar(true)
     })
@@ -1144,45 +1873,56 @@
       const dx = event.clientX - gestoX
       gestoX = null
       if (cluster.classList.contains('away') || Math.abs(dx) < 42) return
-      pagina = dx < 0 ? Math.min(PAGINAS.length - 1, pagina + 1) : Math.max(0, pagina - 1)
-      renderLayout()
+      definirPagina(dx < 0 ? pagina + 1 : pagina - 1)
     })
     document.querySelectorAll('#pager button').forEach((botao) => {
       botao.addEventListener('click', (event) => {
         event.stopPropagation()
-        pagina = Number(botao.dataset.i) || 0
-        renderLayout()
+        definirPagina(botao.dataset.i)
       })
     })
     detached.addEventListener('click', () => {
-      pagina = 2
+      definirPagina(2)
       aparecerPorUmTempo(4500)
-      renderLayout()
     })
 
     document.getElementById('btn-prev').addEventListener('click', (event) => {
       event.stopPropagation()
+      folhaSentido = -1
+      if (musicaExpandidaVisivel() && !folhaEmCurso) animarFolhaMusica(-1, () => {})
       window.island?.mediaCommand('prev')
     })
     document.getElementById('btn-next').addEventListener('click', (event) => {
       event.stopPropagation()
+      folhaSentido = 1
+      if (musicaExpandidaVisivel() && !folhaEmCurso) animarFolhaMusica(1, () => {})
       window.island?.mediaCommand('next')
     })
     document.getElementById('btn-play').addEventListener('click', (event) => {
       event.stopPropagation()
-      music.isPlaying = !music.isPlaying
+      if (music.isPlaying) {
+        const decorrido = Date.now() - music.stamp
+        if (music.durationMs) music.progressMs = Math.min(music.durationMs, music.progressMs + decorrido)
+        else music.progressMs += decorrido
+      }
+      const proximo = !music.isPlaying
+      playOtimista = proximo
+      syncPlayAte = Date.now() + 1800
+      music.isPlaying = proximo
+      music.stamp = Date.now()
       paintMusic()
+      paintProgress()
       window.island?.mediaCommand('playpause')
     })
-    document.getElementById('btn-timer-toggle').addEventListener('click', (event) => {
+    document.getElementById('btn-timer-reset').addEventListener('click', (event) => {
       event.stopPropagation()
-      toggleTimerRun()
+      resetTimer()
     })
     document.getElementById('btn-timer-stop').addEventListener('click', (event) => {
       event.stopPropagation()
-      stopTimer()
+      alternarTimerPrincipal()
     })
-    document.querySelectorAll('.chip').forEach((chip) => {
+    document.querySelectorAll('#ilha .chip').forEach((chip) => {
       chip.addEventListener('click', (event) => {
         event.stopPropagation()
         startIslandTimer(chip.dataset.min)
@@ -1225,7 +1965,6 @@
       if (dentro) {
         clearTimeout(hotLeave)
         clearTimeout(visitaTimer)
-        if (cluster.classList.contains('away')) pagina = music.active ? 0 : 3
         mostrarIlha()
         renderLayout()
         return
@@ -1241,29 +1980,82 @@
 
     window.island?.onSpotifyUpdate((data) => {
       if (!data || !data.playing) {
-        const tinha = music.active
         music.active = false
         music.isPlaying = false
-        if (tinha) renderLayout()
+        music.title = ''
+        music.artist = ''
+        music.art = ''
+        music.progressMs = 0
+        music.durationMs = 0
+        playOtimista = null
+        syncPlayAte = 0
+        seekOtimistaAte = 0
+        arrastandoSeek = false
+        applyArt('')
+        haloDaCapa = HALO.neutro
+        atualizarAmbienteMusica()
+        paintMusic()
+        renderLayout()
         return
       }
       const entrou = !music.active
       music.active = true
-      music.isPlaying = data.isPlaying !== false
-      music.title = data.title || 'Sem título'
-      music.artist = data.artist || ''
-      music.progressMs = data.progressMs || 0
-      music.durationMs = data.durationMs || 0
-      music.stamp = Date.now()
-      if (data.art) {
-        music.art = data.art
-        applyArt(data.art)
+      const tocando = estadoPlayDoServidor(data)
+      const novoTitulo = data.title || 'Sem título'
+      const novoArtista = data.artist || ''
+      const faixaMudou = !!(music.title || music.artist)
+        && (music.title !== novoTitulo || music.artist !== novoArtista)
+      const animarFolha = faixaMudou && !entrou && !folhaEmCurso
+      aplicarEstadoPlay(tocando)
+      const servidorMs = data.progressMs || 0
+      if (faixaMudou) {
+        seekOtimistaAte = 0
+        music.progressMs = servidorMs
+        music.stamp = Date.now()
+      } else if (playOtimista === null) {
+        if (Date.now() < seekOtimistaAte) {
+          const alvo = music.progressMs
+          if (servidorMs + 3500 >= alvo || alvo < 4000) {
+            music.progressMs = servidorMs
+            music.stamp = Date.now()
+            if (Math.abs(servidorMs - alvo) <= 1800) seekOtimistaAte = 0
+          }
+        } else {
+          music.progressMs = servidorMs
+          music.stamp = Date.now()
+        }
       }
-      paintMusic()
+      music.durationMs = data.durationMs || 0
+
+      function aplicarVisualFaixa() {
+        music.title = novoTitulo
+        music.artist = novoArtista
+        if (data.art) {
+          music.art = data.art
+          applyArt(data.art)
+        }
+        paintMusic()
+      }
+
+      if (faixaMudou && folhaEmCurso) {
+        aplicarVisualFaixa()
+      } else if (animarFolha) {
+        const sentido = folhaSentido
+        animarFolhaMusica(sentido, () => {
+          aplicarVisualFaixa()
+          folhaSentido = 1
+        })
+      } else {
+        aplicarVisualFaixa()
+      }
       paintProgress()
-      if (entrou) pagina = 0
-      renderLayout()
-      if (entrou) aparecerPorUmTempo(4500)
+
+      if (entrou) {
+        definirPagina(0)
+        aparecerPorUmTempo(4500)
+      } else {
+        renderLayout()
+      }
     })
 
     window.island?.onPower((data) => {
@@ -1297,9 +2089,11 @@
         else paintTimer()
       }
       if (music.active) paintProgress()
-    }, 250)
+    }, 100)
 
+    carregarPagina()
     paintClock()
+    paintTimer()
     renderLayout()
 
     window.showNotification = function (app, msg) {
@@ -1312,14 +2106,12 @@
       })
     }
     window.showMusic = function () {
-      pagina = 0
+      definirPagina(0)
       mostrarIlha()
-      renderLayout()
     }
     window.showTimer = function () {
-      pagina = 2
+      definirPagina(2)
       aparecerPorUmTempo(4500)
-      renderLayout()
     }
     window.showIdle = function () {
       dismissAlert()
