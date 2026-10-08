@@ -84,6 +84,8 @@
     .blob {
       position: relative;
       flex: none;
+      display: flex;
+      flex-direction: column;
       overflow: hidden;
       color: #fff;
       cursor: pointer;
@@ -101,7 +103,6 @@
         margin .58s var(--spring),
         box-shadow .5s ease,
         opacity .3s ease;
-      will-change: width, height;
     }
 
     /* Recolhida não deixa o halo vazar para a tela. */
@@ -138,7 +139,13 @@
     /* Compacta: uma atividade, conteúdo colado, sem espaço sobrando. */
     .blob.music-compact { width: 98px; height: 37px; border-radius: 19px; }
     .blob.timer-compact { width: 124px; height: 37px; border-radius: 19px; }
-    .blob.charge { width: 108px; height: 37px; border-radius: 19px; }
+    .blob.charge {
+      width: 108px;
+      min-width: 108px;
+      height: 37px;
+      border-radius: 19px;
+      background: linear-gradient(145deg, rgba(18, 28, 22, .98), rgba(8, 12, 10, .99));
+    }
 
     /* Mínima: duas atividades. A música vira um círculo; o timer fica ao lado. */
     .blob.minimal { width: 37px; height: 37px; border-radius: 19px; }
@@ -184,6 +191,11 @@
         0 20px 50px -12px rgba(0,0,0,.55),
         inset 0 1px rgba(255,255,255,.1);
     }
+    #cluster.away,
+    #cluster.away * {
+      animation-play-state: paused;
+    }
+
     .music-ambient {
       position: absolute;
       inset: 0;
@@ -192,11 +204,14 @@
       overflow: hidden;
       opacity: 0;
       pointer-events: none;
+      content-visibility: hidden;
       transition: opacity .55s var(--ease);
     }
+    .blob.expanded-music .music-ambient {
+      content-visibility: visible;
+    }
     .blob.has-music-art.expanded-music .music-ambient,
-    .blob.expanded-music.is-music-live .music-ambient,
-    .blob.has-music-art.music-compact .music-ambient {
+    .blob.expanded-music.is-music-live .music-ambient {
       opacity: 1;
     }
     .music-ambient-bg {
@@ -262,19 +277,13 @@
         rgba(0,0,0,.78) 100%
       );
     }
-    /* Páginas expandidas: conteúdo em cima, pager no rodapé (sem sobrepor a barra). */
-    .blob.expanded-music,
-    .blob.power,
-    .blob.expanded-timer,
-    .blob.expanded-status {
-      display: flex;
-      flex-direction: column;
-    }
+    /* Conteúdo ocupa a cápsula; pager só nas páginas expandidas. */
     .blob-shell {
       position: relative;
       flex: 1 1 auto;
       min-height: 0;
       width: 100%;
+      align-self: stretch;
     }
     .blob-pager-footer {
       flex: 0 0 26px;
@@ -330,10 +339,20 @@
 
     .face[data-face="rest"],
     .face[data-face="music-min"],
-    .face[data-face="timer-min"] {
+    .face[data-face="timer-min"],
+    .face[data-face="charge"],
+    .face[data-face="music-compact"],
+    .face[data-face="timer-compact"] {
       display: flex;
       align-items: center;
       justify-content: center;
+    }
+    .face[data-face="charge"] {
+      justify-content: flex-start;
+    }
+    .face[data-face="music-compact"] .row,
+    .face[data-face="timer-compact"] .row {
+      width: 100%;
     }
 
     .rest-time, .min-time, .compact-time {
@@ -385,7 +404,7 @@
       100% { transform: scale(1); }
     }
     .art.pop { animation: artPop .62s var(--ease); }
-    #ilha.track-leafing .art.pop { animation: none; }
+    #ilha.track-page-turn .art.pop { animation: none; }
 
     /* Equalizador com as cores da capa */
     .eq { display: flex; align-items: flex-end; gap: 2.5px; height: 14px; margin-left: auto; }
@@ -520,38 +539,29 @@
     .music-meta-wrap {
       position: relative;
       z-index: 1;
-      perspective: 720px;
-      perspective-origin: 28% center;
       min-height: 56px;
       overflow: hidden;
       border-radius: 14px;
+      isolation: isolate;
+      perspective: 880px;
+      perspective-origin: 50% 42%;
     }
-    .music-meta-wrap.leaf-active::before {
+    .music-meta-wrap.page-active::after {
       content: '';
       position: absolute;
       inset: 0;
-      z-index: 4;
+      z-index: 3;
       pointer-events: none;
-      background: linear-gradient(
-        100deg,
-        rgba(0,0,0,.62) 0%,
-        rgba(0,0,0,.22) 42%,
-        transparent 68%
-      );
+      background: linear-gradient(90deg, rgba(0,0,0,.5), transparent 42%);
       opacity: 0;
-      animation: leafShade .72s var(--ease) both;
+      animation: pageEdgeShade .52s var(--ease) both;
     }
-    .music-meta-wrap.leaf-active.leaf-back::before {
-      background: linear-gradient(
-        260deg,
-        rgba(0,0,0,.62) 0%,
-        rgba(0,0,0,.22) 42%,
-        transparent 68%
-      );
+    .music-meta-wrap.page-active.page-back::after {
+      background: linear-gradient(270deg, rgba(0,0,0,.5), transparent 42%);
     }
-    @keyframes leafShade {
+    @keyframes pageEdgeShade {
       0%, 100% { opacity: 0; }
-      28%, 58% { opacity: 1; }
+      35%, 65% { opacity: .85; }
     }
     .music-meta {
       position: relative;
@@ -561,74 +571,54 @@
       align-items: center;
       min-width: 0;
       padding-right: 64px;
-      transform-style: preserve-3d;
-      backface-visibility: hidden;
-      transition:
-        transform .62s var(--ease),
-        opacity .48s ease,
-        filter .48s ease,
-        box-shadow .5s ease;
+      transform: translate3d(0, 0, 0);
       will-change: transform, opacity;
     }
-    .music-meta.leaf-out.leaf-fwd {
-      transform: rotateY(-92deg) translateX(-10px) scale(.9);
-      opacity: 0.06;
-      filter: blur(3px) brightness(.72);
+    .music-meta.page-out.page-fwd {
+      animation: pageSlideOutFwd 260ms var(--ease) forwards;
       transform-origin: left center;
-      box-shadow: -16px 6px 32px rgba(0,0,0,.5);
+      box-shadow: 10px 0 26px rgba(0,0,0,.42);
     }
-    .music-meta.leaf-out.leaf-back {
-      transform: rotateY(92deg) translateX(10px) scale(.9);
-      opacity: 0.06;
-      filter: blur(3px) brightness(.72);
+    .music-meta.page-out.page-back {
+      animation: pageSlideOutBack 260ms var(--ease) forwards;
       transform-origin: right center;
-      box-shadow: 16px 6px 32px rgba(0,0,0,.5);
+      box-shadow: -10px 0 26px rgba(0,0,0,.42);
     }
-    .music-meta.leaf-in.leaf-fwd {
-      transform: rotateY(86deg) translateX(14px) scale(.9);
-      opacity: 0;
-      filter: blur(4px);
+    .music-meta.page-in.page-fwd {
+      animation: pageSlideInFwd 280ms var(--ease) forwards;
       transform-origin: right center;
-      box-shadow: 12px 4px 24px rgba(0,0,0,.35);
     }
-    .music-meta.leaf-in.leaf-fwd.leaf-run {
-      transform: rotateY(0deg) translateX(0) scale(1);
-      opacity: 1;
-      filter: blur(0) brightness(1);
-      box-shadow: none;
-    }
-    .music-meta.leaf-in.leaf-back {
-      transform: rotateY(-86deg) translateX(-14px) scale(.9);
-      opacity: 0;
-      filter: blur(4px);
+    .music-meta.page-in.page-back {
+      animation: pageSlideInBack 280ms var(--ease) forwards;
       transform-origin: left center;
-      box-shadow: -12px 4px 24px rgba(0,0,0,.35);
     }
-    .music-meta.leaf-in.leaf-back.leaf-run {
-      transform: rotateY(0deg) translateX(0) scale(1);
-      opacity: 1;
-      filter: blur(0) brightness(1);
-      box-shadow: none;
+    @keyframes pageSlideOutFwd {
+      0%   { transform: translate3d(0, 0, 0) rotateY(0deg); opacity: 1; filter: brightness(1); }
+      100% { transform: translate3d(-108%, 0, 0) rotateY(-16deg); opacity: 0; filter: brightness(.72); }
     }
-    .music-hero-glance.leaf-glance {
-      animation: glanceLeaf .72s var(--ease) both;
+    @keyframes pageSlideOutBack {
+      0%   { transform: translate3d(0, 0, 0) rotateY(0deg); opacity: 1; filter: brightness(1); }
+      100% { transform: translate3d(108%, 0, 0) rotateY(16deg); opacity: 0; filter: brightness(.72); }
     }
-    @keyframes glanceLeaf {
-      0%   { opacity: .62; transform: rotate(7deg) scale(1); }
-      38%  { opacity: .04; transform: rotate(0deg) scale(.86) translateX(-18%); }
-      100% { opacity: .62; transform: rotate(7deg) scale(1); }
+    @keyframes pageSlideInFwd {
+      0%   { transform: translate3d(106%, 0, 0) rotateY(14deg); opacity: 0; filter: brightness(.8); }
+      100% { transform: translate3d(0, 0, 0) rotateY(0deg); opacity: 1; filter: brightness(1); }
     }
-    #ilha.track-leafing .music-ambient-bg,
-    #ilha.track-leafing .music-ambient-canvas {
-      transition-duration: .75s;
-      filter: blur(46px) saturate(1.65) brightness(.72);
+    @keyframes pageSlideInBack {
+      0%   { transform: translate3d(-106%, 0, 0) rotateY(-14deg); opacity: 0; filter: brightness(.8); }
+      100% { transform: translate3d(0, 0, 0) rotateY(0deg); opacity: 1; filter: brightness(1); }
     }
-    #ilha.track-leafing.is-playing .music-ambient-bg {
-      animation: ambientDrift 14s ease-in-out infinite, leafAmbient .72s var(--ease);
+    .music-hero-glance.page-glance {
+      animation: glancePage .54s var(--ease) both;
     }
-    @keyframes leafAmbient {
-      0%, 100% { transform: scale(1.14); }
-      45% { transform: scale(1.22) translateX(-2%); }
+    @keyframes glancePage {
+      0%   { opacity: .62; transform: rotate(7deg) translateX(0); }
+      45%  { opacity: .12; transform: rotate(4deg) translateX(-14%); }
+      100% { opacity: .62; transform: rotate(7deg) translateX(0); }
+    }
+    #ilha.track-page-turn .music-ambient-bg,
+    #ilha.track-page-turn .music-ambient-canvas {
+      transition-duration: .55s;
     }
     .music-copy { min-width: 0; flex: 1; }
     .art-xl {
@@ -916,8 +906,7 @@
     }
     .date-line {
       margin-top: 6px;
-      font-size: 12px;
-      font-weight: 500;
+(9999999999991,)      font-weight: 500;
       color: rgba(255,255,255,.35);
     }
 
@@ -1333,6 +1322,12 @@
     let arrastandoSeek = false
     let folhaSentido = 1
     let folhaEmCurso = false
+    let folhaAguardandoDados = false
+    let folhaPacotePendente = null
+    let folhaTimers = []
+    const PAGE_OUT_MS = 260
+    const PAGE_IN_MS = 280
+    const PAGE_WAIT_DADOS_MS = 480
     const PAGINAS = ['expanded-music', 'power', 'expanded-timer', 'expanded-status']
 
     const VOLTA_ANEL_SM = 2 * Math.PI * 9.5
@@ -1400,6 +1395,7 @@
         })
       }
       if (alert && (mode === 'alert-inline' || mode === 'alert-banner')) paintAlert()
+      garantirProgresso()
     }
 
     function paintAlert() {
@@ -1524,6 +1520,32 @@
       pintarAnel('ring-lg', VOLTA_ANEL_LG, fracao)
     }
 
+    let timerPulso = 0
+    function pararPulsoTimer() {
+      clearTimeout(timerPulso)
+      timerPulso = 0
+    }
+    function pulsoTimer() {
+      if (!timer.active || !timer.running) {
+        timerPulso = 0
+        return
+      }
+      if (timerLeft() <= 0) {
+        timerPulso = 0
+        finishTimer()
+        return
+      }
+      paintTimer()
+      timerPulso = setTimeout(pulsoTimer, 1000 - (Date.now() % 1000) + 30)
+    }
+    function garantirPulsoTimer() {
+      if (timer.active && timer.running) {
+        if (!timerPulso) timerPulso = setTimeout(pulsoTimer, 1000 - (Date.now() % 1000) + 30)
+      } else {
+        pararPulsoTimer()
+      }
+    }
+
     function finishTimer() {
       if (timer.fired) return
       timer.fired = true
@@ -1538,6 +1560,7 @@
       })
       paintTimer()
       renderLayout()
+      garantirPulsoTimer()
     }
 
     function startIslandTimer(min) {
@@ -1552,6 +1575,7 @@
       paintTimer()
       renderLayout()
       aparecerPorUmTempo(4500)
+      garantirPulsoTimer()
     }
     window.startIslandTimer = startIslandTimer
 
@@ -1566,6 +1590,7 @@
         timer.fired = false
       }
       paintTimer()
+      garantirPulsoTimer()
     }
 
     function resetTimer() {
@@ -1576,6 +1601,7 @@
       timer.end = Date.now() + timer.total * 1000
       if (alert && alert.kind === 'timer') dismissAlert()
       paintTimer()
+      garantirPulsoTimer()
     }
 
     // A cor viva da capa vira o halo da cápsula e o brilho dos detalhes.
@@ -1592,7 +1618,11 @@
       if (glance) glance.style.backgroundImage = img
     }
 
+    let ultimaUrlExtrairCor = ''
+
     function extrairCor(url) {
+      if (!url || url === ultimaUrlExtrairCor) return
+      ultimaUrlExtrairCor = url
       const img = new Image()
       if (url && !String(url).startsWith('data:')) img.crossOrigin = 'anonymous'
       img.onload = () => {
@@ -1621,6 +1651,7 @@
         }
       }
       img.onerror = () => {
+        ultimaUrlExtrairCor = ''
         haloDaCapa = HALO.neutro
         atualizarAmbienteMusica()
       }
@@ -1691,60 +1722,90 @@
       return music.active && !cluster.classList.contains('away') && pagina === 0
     }
 
-    function animarFolhaMusica(sentido, aoConcluir) {
+    function limparTimersFolha() {
+      folhaTimers.forEach((id) => clearTimeout(id))
+      folhaTimers = []
+    }
+
+    function agendarFolha(fn, ms) {
+      const id = setTimeout(fn, ms)
+      folhaTimers.push(id)
+      return id
+    }
+
+    function aplicarPacoteFaixa(pacote) {
+      if (!pacote) return
+      music.title = pacote.title
+      music.artist = pacote.artista
+      if (pacote.art) {
+        music.art = pacote.art
+        applyArt(pacote.art)
+      }
+      paintMusic()
+    }
+
+    function finalizarPassagemPagina(meta, wrap, glance) {
+      limparTimersFolha()
+      meta.classList.remove('page-out', 'page-in', 'page-fwd', 'page-back')
+      wrap?.classList.remove('page-active', 'page-fwd', 'page-back')
+      glance?.classList.remove('page-glance')
+      island.classList.remove('track-page-turn')
+      folhaEmCurso = false
+      folhaAguardandoDados = false
+      folhaSentido = 1
+    }
+
+    function passarPaginaMusica(sentido) {
       const meta = document.getElementById('music-meta')
       const wrap = document.querySelector('.music-meta-wrap')
       const glance = document.getElementById('music-hero-glance')
-      if (!meta || !musicaExpandidaVisivel() || folhaEmCurso) {
-        aoConcluir()
-        return
-      }
+      if (!meta || !musicaExpandidaVisivel() || folhaEmCurso) return false
+
       folhaEmCurso = true
-      island.classList.add('track-leafing')
+      folhaAguardandoDados = false
+      limparTimersFolha()
+      island.classList.add('track-page-turn')
       const fwd = sentido >= 0
-      const dir = fwd ? 'leaf-fwd' : 'leaf-back'
-      wrap?.classList.remove('leaf-fwd', 'leaf-back', 'leaf-active')
-      wrap?.classList.add('leaf-active', dir)
-      meta.classList.remove('leaf-in', 'leaf-out', 'leaf-fwd', 'leaf-back', 'leaf-run')
-      meta.classList.add('leaf-out', dir)
-      if (glance) glance.classList.add('leaf-glance')
+      const dir = fwd ? 'page-fwd' : 'page-back'
+
+      wrap?.classList.remove('page-fwd', 'page-back', 'page-active')
+      wrap?.classList.add('page-active', dir)
+      meta.classList.remove('page-out', 'page-in', 'page-fwd', 'page-back')
+      meta.classList.add('page-out', dir)
+      glance?.classList.add('page-glance')
       void meta.offsetWidth
 
-      let meioPronto = false
-      let folhaFechada = false
-      const finalizar = () => {
-        if (folhaFechada) return
-        folhaFechada = true
-        meta.classList.remove('leaf-in', 'leaf-fwd', 'leaf-back', 'leaf-run', 'leaf-out')
-        wrap?.classList.remove('leaf-active', 'leaf-fwd', 'leaf-back')
-        if (glance) glance.classList.remove('leaf-glance')
-        island.classList.remove('track-leafing')
-        folhaEmCurso = false
-      }
-      const entrar = () => {
-        if (meioPronto) return
-        meioPronto = true
-        clearTimeout(fallbackSaida)
-        aoConcluir()
-        meta.classList.remove('leaf-out')
-        meta.classList.add('leaf-in', dir)
+      const iniciarEntrada = () => {
+        folhaAguardandoDados = false
+        if (folhaPacotePendente) {
+          aplicarPacoteFaixa(folhaPacotePendente)
+          folhaPacotePendente = null
+        }
+        meta.classList.remove('page-out')
+        meta.classList.add('page-in', dir)
         void meta.offsetWidth
-        requestAnimationFrame(() => meta.classList.add('leaf-run'))
-        const fallbackEntrada = setTimeout(finalizar, 680)
-        meta.addEventListener('transitionend', function onIn(ev) {
-          if (ev.target !== meta || ev.propertyName !== 'transform') return
-          meta.removeEventListener('transitionend', onIn)
-          clearTimeout(fallbackEntrada)
-          finalizar()
-        })
+        agendarFolha(() => finalizarPassagemPagina(meta, wrap, glance), PAGE_IN_MS)
       }
-      const fallbackSaida = setTimeout(entrar, 640)
-      meta.addEventListener('transitionend', function onOut(ev) {
-        if (ev.target !== meta || ev.propertyName !== 'transform') return
-        meta.removeEventListener('transitionend', onOut)
-        clearTimeout(fallbackSaida)
-        entrar()
-      })
+
+      const aguardarDadosEEntrar = () => {
+        if (folhaPacotePendente) {
+          iniciarEntrada()
+          return
+        }
+        folhaAguardandoDados = true
+        const inicio = Date.now()
+        const tentar = () => {
+          if (folhaPacotePendente || Date.now() - inicio >= PAGE_WAIT_DADOS_MS) {
+            iniciarEntrada()
+            return
+          }
+          agendarFolha(tentar, 32)
+        }
+        agendarFolha(tentar, 32)
+      }
+
+      agendarFolha(aguardarDadosEEntrar, PAGE_OUT_MS)
+      return true
     }
 
     function paintMusic() {
@@ -1778,6 +1839,27 @@
       document.getElementById('time-left').textContent = music.durationMs ? formatMs(music.durationMs) : '–:–'
       const barra = document.getElementById('progress-bar')
       if (barra) barra.setAttribute('aria-valuenow', String(Math.round(pct)))
+    }
+
+    let progressoPulso = 0
+    function pulsoProgresso() {
+      if (!music.active || !music.isPlaying || !island.classList.contains('expanded-music') || arrastandoSeek) {
+        progressoPulso = 0
+        return
+      }
+      paintProgress()
+      progressoPulso = setTimeout(pulsoProgresso, 250)
+    }
+    function garantirProgresso() {
+      const segue = music.active && music.isPlaying && island.classList.contains('expanded-music') && !arrastandoSeek
+      if (!segue) {
+        clearTimeout(progressoPulso)
+        progressoPulso = 0
+        return
+      }
+      if (progressoPulso) return
+      paintProgress()
+      progressoPulso = setTimeout(pulsoProgresso, 250)
     }
 
     function msNaBarra(clientX) {
@@ -1838,12 +1920,14 @@
       }
       window.island?.segurar(false)
       confirmarSeek(msNaBarra(event.clientX))
+      garantirProgresso()
     }
     barraProgresso.addEventListener('pointerdown', (event) => {
       event.stopPropagation()
       if (!music.active || !music.durationMs) return
       arrastandoSeek = true
       barraProgresso.classList.add('seeking')
+      garantirProgresso()
       barraProgresso.setPointerCapture(event.pointerId)
       window.island?.segurar(true)
       aplicarSeekVisual(msNaBarra(event.clientX))
@@ -1889,13 +1973,13 @@
     document.getElementById('btn-prev').addEventListener('click', (event) => {
       event.stopPropagation()
       folhaSentido = -1
-      if (musicaExpandidaVisivel() && !folhaEmCurso) animarFolhaMusica(-1, () => {})
+      if (musicaExpandidaVisivel() && !folhaEmCurso) passarPaginaMusica(-1)
       window.island?.mediaCommand('prev')
     })
     document.getElementById('btn-next').addEventListener('click', (event) => {
       event.stopPropagation()
       folhaSentido = 1
-      if (musicaExpandidaVisivel() && !folhaEmCurso) animarFolhaMusica(1, () => {})
+      if (musicaExpandidaVisivel() && !folhaEmCurso) passarPaginaMusica(1)
       window.island?.mediaCommand('next')
     })
     document.getElementById('btn-play').addEventListener('click', (event) => {
@@ -1912,6 +1996,7 @@
       music.stamp = Date.now()
       paintMusic()
       paintProgress()
+      garantirProgresso()
       window.island?.mediaCommand('playpause')
     })
     document.getElementById('btn-timer-reset').addEventListener('click', (event) => {
@@ -1955,9 +2040,20 @@
         if (baixo <= 0) return
         rects.push({ x: r.left - 6, y: topo, w: r.width + 12, h: baixo - topo })
       })
+      const texto = JSON.stringify(rects)
+      if (texto === ultimaHitbox) return
+      ultimaHitbox = texto
       window.island?.setHitbox(rects)
     }
-    setInterval(publicarHitbox, 50)
+    let ultimaHitbox = ''
+    let hitboxTimer = 0
+    function agendarHitbox() {
+      clearTimeout(hitboxTimer)
+      hitboxTimer = setTimeout(publicarHitbox, 80)
+    }
+    const observadorHitbox = new ResizeObserver(agendarHitbox)
+    observadorHitbox.observe(cluster)
+    observadorHitbox.observe(island)
     publicarHitbox()
 
     window.island?.onPointer((dentro) => {
@@ -1991,7 +2087,13 @@
         syncPlayAte = 0
         seekOtimistaAte = 0
         arrastandoSeek = false
+        folhaPacotePendente = null
+        limparTimersFolha()
+        folhaEmCurso = false
+        folhaAguardandoDados = false
+        island.classList.remove('track-page-turn')
         applyArt('')
+        ultimaUrlExtrairCor = ''
         haloDaCapa = HALO.neutro
         atualizarAmbienteMusica()
         paintMusic()
@@ -2005,7 +2107,6 @@
       const novoArtista = data.artist || ''
       const faixaMudou = !!(music.title || music.artist)
         && (music.title !== novoTitulo || music.artist !== novoArtista)
-      const animarFolha = faixaMudou && !entrou && !folhaEmCurso
       aplicarEstadoPlay(tocando)
       const servidorMs = data.progressMs || 0
       if (faixaMudou) {
@@ -2027,7 +2128,16 @@
       }
       music.durationMs = data.durationMs || 0
 
-      function aplicarVisualFaixa() {
+      const pacoteFaixa = {
+        title: novoTitulo,
+        artista: novoArtista,
+        art: data.art || '',
+      }
+
+      if (faixaMudou && !entrou) {
+        folhaPacotePendente = pacoteFaixa
+        if (!folhaEmCurso) passarPaginaMusica(folhaSentido)
+      } else {
         music.title = novoTitulo
         music.artist = novoArtista
         if (data.art) {
@@ -2036,29 +2146,25 @@
         }
         paintMusic()
       }
-
-      if (faixaMudou && folhaEmCurso) {
-        aplicarVisualFaixa()
-      } else if (animarFolha) {
-        const sentido = folhaSentido
-        animarFolhaMusica(sentido, () => {
-          aplicarVisualFaixa()
-          folhaSentido = 1
-        })
-      } else {
-        aplicarVisualFaixa()
-      }
       paintProgress()
 
       if (entrou) {
         definirPagina(0)
         aparecerPorUmTempo(4500)
-      } else {
+      } else if (faixaMudou) {
         renderLayout()
       }
+      garantirProgresso()
     })
 
+    function chaveVisualEnergia() {
+      const mode = resolveMode()
+      const kind = alert ? alert.kind : ''
+      return mode + '/' + kind + '/' + (power.charging ? 'c' : 'o') + '/' + (power.available ? 'b' : 'n')
+    }
+
     window.island?.onPower((data) => {
+      const chaveAntes = chaveVisualEnergia()
       const antes = !!power.charging
       power = {
         available: !!(data && data.available),
@@ -2066,7 +2172,10 @@
         charging: !!(data && data.charging),
       }
       paintBattery()
-      renderLayout()
+      const chaveDepois = chaveVisualEnergia()
+      const renderizou = chaveDepois !== chaveAntes
+      if (renderizou) renderLayout()
+      else ajustarHalo(resolveMode(), alert ? alert.kind : '')
       if (power.charging && !antes) aparecerPorUmTempo(5000)
       if (!power.available) return
       if (power.charging || power.percent > 20) avisouFraca = false
@@ -2082,17 +2191,15 @@
       }
     })
 
-    setInterval(() => {
+    function agendarRelogio() {
       paintClock()
-      if (timer.active) {
-        if (timer.running && timerLeft() <= 0) finishTimer()
-        else paintTimer()
-      }
-      if (music.active) paintProgress()
-    }, 100)
+      const agora = new Date()
+      const falta = 60000 - (agora.getSeconds() * 1000 + agora.getMilliseconds()) + 40
+      setTimeout(agendarRelogio, Math.max(1000, falta))
+    }
 
     carregarPagina()
-    paintClock()
+    agendarRelogio()
     paintTimer()
     renderLayout()
 

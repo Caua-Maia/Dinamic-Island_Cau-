@@ -1,4 +1,6 @@
 const { app, BrowserWindow, ipcMain, screen, Tray, Menu, nativeImage, globalShortcut, shell, dialog, powerMonitor } = require('electron')
+app.commandLine.appendSwitch('disable-background-networking')
+app.commandLine.appendSwitch('log-level', '3')
 const path = require('path')
 const http = require('http')
 const fs = require('fs')
@@ -28,6 +30,10 @@ let paginaPronta = false
 let bateriaTimer = null
 let lendoBateria = false
 let ultimaBateria = { available: false, percent: null, charging: false }
+const CHARGING_LEITURAS_PARA_MUDAR = 2
+let filaLeituraCharging = []
+let forcarChargingNaProximaLeitura = null
+let primeiraLeituraBateria = true
 let hitboxes = []
 let cursorTimer = null
 let cursorDentro = false
@@ -140,22 +146,36 @@ ipcMain.on('segurar-mouse', (_event, ativo) => {
   if (segurandoMouse && islandWindow) islandWindow.setIgnoreMouseEvents(false)
 })
 
-// A página não recebe mouse na área transparente. O cursor global é comparado com a cápsula.
+// Longe do topo, o cursor é olhado devagar. Perto da cápsula, o teste fica rápido.
 function vigiarCursor() {
   if (cursorTimer) return
-  cursorTimer = setInterval(() => {
-    if (!islandWindow || islandWindow.isDestroyed() || !islandWindow.isVisible()) return
-    const cursor = screen.getCursorScreenPoint()
-    const bounds = islandWindow.getBounds()
-    const x = cursor.x - bounds.x
-    const y = cursor.y - bounds.y
-    const dentro = segurandoMouse || hitboxes.some((r) => x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h)
-    if (dentro === cursorDentro) return
-    cursorDentro = dentro
-    if (dentro) islandWindow.setIgnoreMouseEvents(false)
-    else islandWindow.setIgnoreMouseEvents(true, { forward: true })
-    islandWindow.webContents.send('pointer-over', dentro)
-  }, 30)
+  const pulso = () => {
+    cursorTimer = null
+    let espera = 500
+    if (islandWindow && !islandWindow.isDestroyed() && islandWindow.isVisible()) {
+      const cursor = screen.getCursorScreenPoint()
+      const bounds = islandWindow.getBounds()
+      const perto = cursor.y <= bounds.y + bounds.height + 96
+        && cursor.x >= bounds.x - 64
+        && cursor.x <= bounds.x + bounds.width + 64
+      if (perto || cursorDentro || segurandoMouse) {
+        const x = cursor.x - bounds.x
+        const y = cursor.y - bounds.y
+        const dentro = segurandoMouse || hitboxes.some((r) => x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h)
+        if (dentro !== cursorDentro) {
+          cursorDentro = dentro
+          if (dentro) islandWindow.setIgnoreMouseEvents(false)
+          else islandWindow.setIgnoreMouseEvents(true, { forward: true })
+          islandWindow.webContents.send('pointer-over', dentro)
+        }
+        espera = 32
+      } else {
+        espera = 200
+      }
+    }
+    cursorTimer = setTimeout(pulso, espera)
+  }
+  pulso()
 }
 
 function dispararTimer(minutos) {
@@ -164,12 +184,38 @@ function dispararTimer(minutos) {
   islandWindow.webContents.executeJavaScript(`window.startIslandTimer && window.startIslandTimer(${Number(minutos) || 5})`)
 }
 
+function chargingEstavelAposLeitura(novo) {
+  if (forcarChargingNaProximaLeitura !== null) {
+    const fixo = !!forcarChargingNaProximaLeitura
+    forcarChargingNaProximaLeitura = null
+    filaLeituraCharging = [fixo, fixo]
+    return fixo
+  }
+  filaLeituraCharging.push(!!novo)
+  if (filaLeituraCharging.length > CHARGING_LEITURAS_PARA_MUDAR) {
+    filaLeituraCharging.shift()
+  }
+  if (filaLeituraCharging.length < CHARGING_LEITURAS_PARA_MUDAR) {
+    return ultimaBateria.charging
+  }
+  const todosTrue = filaLeituraCharging.every((v) => v === true)
+  const todosFalse = filaLeituraCharging.every((v) => v === false)
+  if (todosTrue) return true
+  if (todosFalse) return false
+  return ultimaBateria.charging
+}
+
 function enviarPower(payload) {
+  const antes = { ...ultimaBateria }
   ultimaBateria = { ...ultimaBateria, ...payload }
   if (!ultimaBateria.available) {
     ultimaBateria.charging = false
     ultimaBateria.percent = null
   }
+  const repetido = antes.available === ultimaBateria.available
+    && antes.charging === ultimaBateria.charging
+    && antes.percent === ultimaBateria.percent
+  if (repetido) return
   if (!islandWindow || islandWindow.isDestroyed()) return
   islandWindow.webContents.send('power-update', ultimaBateria)
 }
@@ -232,10 +278,16 @@ function lerBateria() {
           enviarPower({ available: false, charging: false, percent: null })
           return
         }
+        let charging = chargingEstavelAposLeitura(!!dados.charging)
+        if (primeiraLeituraBateria) {
+          primeiraLeituraBateria = false
+          charging = !!dados.charging
+          filaLeituraCharging = [charging, charging]
+        }
         enviarPower({
           available: true,
           percent: Number(dados.percent),
-          charging: !!dados.charging,
+          charging,
         })
       } catch {
         enviarPower({ available: false, charging: false, percent: null })
@@ -252,9 +304,10 @@ function lerBateriaComAtraso() {
 
 function iniciarBateria() {
   lerBateria()
-  bateriaTimer = setInterval(lerBateria, 5000)
+  bateriaTimer = setInterval(lerBateria, 45000)
   powerMonitor.on('on-battery', () => {
-    enviarPower({ charging: false })
+    forcarChargingNaProximaLeitura = false
+    filaLeituraCharging = [false, false]
     lerBateria()
   })
   powerMonitor.on('on-ac', () => lerBateriaComAtraso())
@@ -352,9 +405,26 @@ function escolherSessao(sessions) {
     || null
 }
 
+let ultimoEnvioProgresso = 0
+let progressoAgendado = null
+let payloadProgresso = null
+
+function metaDaFaixaMudou(payload) {
+  if (!ultimoPayload || !ultimoPayload.playing) return true
+  return ultimoPayload.title !== payload.title
+    || ultimoPayload.artist !== payload.artist
+    || !!ultimoPayload.isPlaying !== !!payload.isPlaying
+    || ultimoPayload.durationMs !== payload.durationMs
+    || !!payload.art
+}
+
 function publicarSessoes(sessions) {
   const sessao = escolherSessao(sessions)
   if (!sessao) {
+    if (progressoAgendado) {
+      clearTimeout(progressoAgendado)
+      progressoAgendado = null
+    }
     limparMusicaIlha()
     return
   }
@@ -372,7 +442,34 @@ function publicarSessoes(sessions) {
     payload.art = sessao.thumbnail
     arteEnviadaPara = chave
   }
-  enviarSpotify(payload)
+
+  if (metaDaFaixaMudou(payload)) {
+    if (progressoAgendado) {
+      clearTimeout(progressoAgendado)
+      progressoAgendado = null
+    }
+    ultimoEnvioProgresso = Date.now()
+    enviarSpotify(payload)
+    return
+  }
+
+  if (!payload.isPlaying && Math.abs((ultimoPayload.progressMs || 0) - payload.progressMs) < 800) return
+
+  const salto = Math.abs((ultimoPayload.progressMs || 0) - payload.progressMs)
+  const agora = Date.now()
+  if (salto > 2500 || agora - ultimoEnvioProgresso >= 1000) {
+    ultimoEnvioProgresso = agora
+    enviarSpotify(payload)
+    return
+  }
+
+  payloadProgresso = payload
+  if (progressoAgendado) return
+  progressoAgendado = setTimeout(() => {
+    progressoAgendado = null
+    ultimoEnvioProgresso = Date.now()
+    if (payloadProgresso) enviarSpotify(payloadProgresso)
+  }, 1000 - (agora - ultimoEnvioProgresso))
 }
 
 // Ouve o que o Windows já mostra no volume: Spotify, navegador, etc.
@@ -496,7 +593,8 @@ function nomeArtista(item) {
 
 // Consulta a faixa atual e avisa o renderer (fallback; no Windows a sessão SMTC manda)
 async function consultarTocando(tentouRenovar = false) {
-  if (process.platform === 'win32' && pararSessoes) return
+  const skipSmtc = process.platform === 'win32' && !!pararSessoes
+  if (skipSmtc) return
   if (!accessToken) return
   if (Date.now() >= tokenExpiresAt - 30000) await atualizarAccessToken()
 
@@ -544,6 +642,7 @@ async function pulsoSpotify() {
 
 function iniciarPolling() {
   if (spotifyPollTimer) return
+  if (process.platform === 'win32') return
   pulsoSpotify()
   spotifyPollTimer = setInterval(pulsoSpotify, 5000)
 }
@@ -554,6 +653,7 @@ function conectarSpotify() {
     dialog.showErrorBox('Spotify', 'Cole o Client ID e o Client Secret nas constantes no topo de src/main.js.')
     return
   }
+  iniciarServidorOAuth()
   oauthState = crypto.randomBytes(16).toString('hex')
   const url = new URL('https://accounts.spotify.com/authorize')
   url.searchParams.set('client_id', SPOTIFY_CLIENT_ID)
@@ -566,6 +666,7 @@ function conectarSpotify() {
 }
 
 function iniciarServidorOAuth() {
+  if (oauthServer) return
   oauthServer = http.createServer(async (req, res) => {
     const url = new URL(req.url, 'http://127.0.0.1:8888')
     if (url.pathname !== '/callback') {
@@ -624,10 +725,9 @@ if (!instanciaUnica) {
     const registered = globalShortcut.register('CommandOrControl+Shift+I', toggleIsland)
     if (!registered) console.warn('Não foi possível registrar o atalho Ctrl+Shift+I')
 
-    iniciarServidorOAuth()
     carregarTokens()
-    if (refreshToken) iniciarPolling()
     iniciarMidiaWindows()
+    if (refreshToken) iniciarPolling()
     iniciarBateria()
     vigiarCursor()
   })
@@ -642,7 +742,8 @@ if (!instanciaUnica) {
     if (oauthServer) oauthServer.close()
     if (pararSessoes) pararSessoes()
     if (bateriaTimer) clearInterval(bateriaTimer)
-    if (cursorTimer) clearInterval(cursorTimer)
+    if (cursorTimer) clearTimeout(cursorTimer)
+    if (progressoAgendado) clearTimeout(progressoAgendado)
     shutdown().catch(() => {})
   })
 }
